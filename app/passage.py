@@ -136,17 +136,38 @@ class Transhumance:
             return l["album"] or None            # chaîne vide : « pas d'album », choisi à l'écran
         return self.album_propose(dossier)
 
-    def regler_dossier(self, chemin: str, album: str | None = None, coche: bool | None = None, defaut: bool = False) -> None:
+    def regler_dossier(self, chemin: str, album: str | None = None, coche: bool | None = None, defaut: bool = False, vider: bool = False) -> None:
         self.base.executer("INSERT OR IGNORE INTO dossiers(chemin) VALUES (?)", (chemin,))
         if defaut:
             self.base.executer("UPDATE dossiers SET album = NULL WHERE chemin = ?", (chemin,))
         elif album is not None:
             self.base.executer("UPDATE dossiers SET album = ? WHERE chemin = ?", (" ".join(album.split())[:120], chemin))
         if coche is not None:
-            # Cocher un dossier coche tout ce qu'il contient (sauf les dossiers exclus)
-            for d in self._descendance(chemin):
-                if not self._exclu(d):
-                    self.base.executer("INSERT INTO dossiers(chemin, coche) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET coche = excluded.coche", (d, int(coche)))
+            self._cocher(chemin, bool(coche), vider)
+
+    def _cocher(self, chemin: str, coche: bool, vider: bool = False) -> None:
+        """Cocher un dossier coche tout ce qu'il contient (sauf les dossiers exclus).
+        0.1.3 : si une partie seulement était cochée, on s'en souvient — décocher le dossier
+        rend alors ce choix au lieu de tout décocher. « vider » décoche tout, sans souvenir."""
+        dessous = [d for d in self._descendance(chemin) if not self._exclu(d)]
+        avant = {l["chemin"] for l in self.base.tous("SELECT chemin FROM dossiers WHERE coche = 1")} & set(dessous)
+        cle = "souvenir:" + chemin
+        souvenir = [d for d in (self.base.lire(cle) or []) if d in dessous]
+        # Un clic ailleurs dans la même branche périme les souvenirs des dossiers au-dessus et en dessous
+        for l in self.base.tous("SELECT cle FROM reglages WHERE cle LIKE 'souvenir:%'"):
+            autre = l["cle"][len("souvenir:"):]
+            if autre != chemin and (autre in (".", "") or chemin in (".", "") or autre.startswith(chemin + "/") or chemin.startswith(autre + "/")):
+                self.base.executer("DELETE FROM reglages WHERE cle = ?", (l["cle"],))
+        if coche:
+            choisis = set(dessous)
+            if avant and len(avant) < len(dessous):
+                self.base.ecrire(cle, sorted(avant))
+        else:
+            rendre = not vider and souvenir and len(avant) == len(dessous)
+            choisis = set(souvenir) if rendre else set()
+            self.base.executer("DELETE FROM reglages WHERE cle = ?", (cle,))
+        for d in dessous:
+            self.base.executer("INSERT INTO dossiers(chemin, coche) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET coche = excluded.coche", (d, int(d in choisis)))
 
     def _exclu(self, dossier: str) -> bool:
         return PurePosixPath(dossier).parts[:1] in [(x,) for x in self.cfg.exclus]
@@ -216,6 +237,10 @@ class Transhumance:
                 c = str(PurePosixPath(c).parent)
         for n in noeuds.values():
             n["selection"] = "rien" if not n["coches"] else "tout" if n["coches"] == n["a_cocher"] else "partiel"
+        for l in self.base.tous("SELECT cle, valeur FROM reglages WHERE cle LIKE 'souvenir:%'"):
+            n = noeuds.get(l["cle"][len("souvenir:"):])
+            if n and n["selection"] == "tout":
+                n["souvenir"] = len(json.loads(l["valeur"]))       # décocher rendra ce choix
         for n in noeuds.values():
             n["enfants"].sort(key=str.casefold)
         return {"racine": ".", "noeuds": noeuds, "inventaire": self.base.lire("inventaire"),

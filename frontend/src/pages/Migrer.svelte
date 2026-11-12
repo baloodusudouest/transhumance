@@ -155,15 +155,16 @@
         <button type="button" class="pli" aria-expanded={ouverts.has(n.chemin)} aria-label={(ouverts.has(n.chemin) ? 'Replier ' : 'Déplier ') + n.nom} onclick={() => basculer(n.chemin)}>
           <ChevronRight class="size-4 transition-transform {ouverts.has(n.chemin) ? 'rotate-90' : ''}" aria-hidden="true" /></button>
       {:else}<span class="pli" aria-hidden="true"></span>{/if}
-      <!-- Case pleine : tout ce dossier est coché. Case barrée d'un trait : une partie seulement, dans ses sous-dossiers. -->
+      <!-- Case pleine : tout ce dossier est coché. Case barrée d'un trait : une partie seulement, dans ses sous-dossiers.
+           Décocher une case qu'on avait remplie depuis un choix partiel rend ce choix (0.1.3). -->
       <input type="checkbox" class="size-5 flex-none accent-[var(--app)]" checked={n.selection === 'tout'} indeterminate={n.selection === 'partiel'}
              disabled={n.exclu || tache.en_cours || !n.a_cocher}
              aria-label={'Cocher ' + n.nom} aria-checked={n.selection === 'partiel' ? 'mixed' : n.selection === 'tout'}
-             title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}
+             title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : n.souvenir ? `Décocher revient aux ${n.souvenir} sous-dossier(s) cochés avant` : ''}
              onchange={(e) => regler(n.chemin, { coche: n.selection === 'partiel' ? true : e.currentTarget.checked })} />
       <span class="min-w-0 flex-1">
         <span class="block truncate font-medium">{n.nom}{#if n.exclu}&nbsp;<span class="font-normal text-muted-foreground">· jamais migré</span>{/if}</span>
-        <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {poids(n.poids)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}{n.selection === 'partiel' ? ` · ${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}</span>
+        <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {poids(n.poids)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}{n.selection === 'partiel' ? ` · ${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}{#if n.selection === 'partiel' && !tache.en_cours}&nbsp;· <button type="button" class="underline underline-offset-2 hover:text-foreground" aria-label={'Tout décocher dans ' + n.nom} onclick={() => regler(n.chemin, { coche: false, vider: true })}>tout décocher</button>{/if}</span>
       </span>
       {#if n.ici && !n.exclu}
         <input class="album" aria-label={'Album pour ' + n.nom} placeholder="pas d'album" value={n.album || ''} disabled={tache.en_cours}

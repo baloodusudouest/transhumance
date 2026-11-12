@@ -121,6 +121,28 @@ def test_cocher_un_parent_coche_ses_enfants_sauf_les_exclus(monde):
     assert "Pellicule/2021/2021-01-01 Neige" in t.a_migrer()
 
 
+def test_decocher_un_parent_rend_le_choix_d_avant(monde):
+    t = monde[0]
+    seul = "Pellicule/2020/2020-06-10"
+    t.regler_dossier(seul, coche=True)
+    t.regler_dossier("Pellicule", coche=True)                       # case barrée → tout
+    assert t.arbre()["noeuds"]["Pellicule"]["souvenir"] == 1
+    t.regler_dossier("Pellicule", coche=False)                      # décocher : on retrouve le seul dossier choisi
+    assert t.a_migrer() == [seul] and "souvenir" not in t.arbre()["noeuds"]["Pellicule"]
+    t.regler_dossier("Pellicule", coche=False, vider=True)          # « tout décocher »
+    assert t.a_migrer() == []
+    t.regler_dossier("Pellicule", coche=True)                       # depuis rien : pas de souvenir
+    t.regler_dossier("Pellicule", coche=False)
+    assert t.a_migrer() == []
+    # Un clic sur un sous-dossier périme le souvenir du parent
+    t.regler_dossier(seul, coche=True)
+    t.regler_dossier("Pellicule", coche=True)
+    t.regler_dossier("Pellicule/2021", coche=False)
+    t.regler_dossier("Pellicule/2021", coche=True)
+    t.regler_dossier("Pellicule", coche=False)
+    assert t.a_migrer() == []
+
+
 def test_le_passage_garde_personnes_albums_tags_dates(monde):
     t, im, ids, photos = monde
     t.regler_dossier("Pellicule/2020", coche=True)

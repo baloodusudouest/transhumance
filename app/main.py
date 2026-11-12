@@ -146,7 +146,7 @@ def regler_dossier(corps: dict = Body(...)):
     chemin = str(corps.get("chemin", ""))
     if not chemin:
         raise HTTPException(422, "Dossier manquant.")
-    t().regler_dossier(chemin, album=corps.get("album"), coche=corps.get("coche"), defaut=bool(corps.get("defaut")))
+    t().regler_dossier(chemin, album=corps.get("album"), coche=corps.get("coche"), defaut=bool(corps.get("defaut")), vider=bool(corps.get("vider")))
     return t().arbre()
 
 

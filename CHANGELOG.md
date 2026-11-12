@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 0.1.3 — 12 novembre 2026
+- Décocher un dossier qu'on avait coché en entier depuis un choix partiel rend ce choix, au lieu de tout décocher. « tout décocher », à côté du compte, vide le dossier d'un clic.
+
 ## 0.1.2 — 12 novembre 2026
 - La case d'un dossier montre ce qui est coché en dessous : pleine quand tout l'est, barrée d'un trait quand une partie seulement de ses sous-dossiers l'est (avec le compte à côté). Cliquer une case barrée coche tout le dossier.
 - Le bilan liste les fichiers qu'Immich ne connaît pas (ils restent dans le dossier).

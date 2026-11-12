@@ -77,6 +77,12 @@ def test_2_cocher_une_annee_et_la_faire_passer(page):
     assert page.get_by_role("checkbox", name="Cocher Pellicule", exact=True).evaluate("el => el.indeterminate")
     parent.click()                                                   # cliquer une case barrée coche tout le dossier
     page.wait_for_function("el => el.checked && !el.indeterminate", arg=parent.element_handle())
+    parent.click()                                                   # la décocher rend le choix d'avant, pas « rien »
+    page.wait_for_function("el => el.indeterminate", arg=parent.element_handle())
+    assert page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True).is_checked()
+    page.get_by_role("button", name="Tout décocher dans 2019", exact=True).click()
+    page.wait_for_function("el => !el.checked && !el.indeterminate", arg=parent.element_handle())
+    parent.click()
     passer = page.get_by_role("button", name=re.compile(r"Faire passer les dossiers cochés \(2\)"))
     passer.wait_for()
     page.get_by_label("Album pour 2019-08-12 Vendanges").fill("Vendanges 2019")
