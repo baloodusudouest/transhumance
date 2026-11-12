@@ -436,10 +436,13 @@ class Transhumance:
                     self._envoyer(im, l, album_id, nouveaux)
                     self.tache["fait"] += 1
             self._attendre_files(im)
+            # 0.1.4 : le compteur repart pour le contrôle, qui est la partie la plus longue
+            self.tache.update(fait=0, total=sum(self.base.un("SELECT COUNT(*) n FROM photos WHERE dossier = ? AND etat = 'envoyee'", (d,))["n"] for d in dossiers))
             for d in dossiers:
                 for l in self.base.tous("SELECT * FROM photos WHERE dossier = ? AND etat = 'envoyee' ORDER BY rel", (d,)):
                     self.tache["message"] = f"Contrôle de {d}"
                     self._controler(im, l)
+                    self.tache["fait"] += 1
             self.exporter()
             self.base.noter("Lot passé", {"dossiers": len(dossiers)})
             self.tache["message"] = "Lot passé : lis le bilan."
@@ -484,7 +487,9 @@ class Transhumance:
                                                       (chemin, chemin.replace("%", "") + "/%")))],
             "supprimable": bool(pretes) and not en_attente and not etats.get("vue") and not etats.get("envoyee"),
             "phrase": f"{len(visibles)} fichiers dans ce dossier ; {len(pretes) + etats.get('supprimee', 0)} retrouvés identiques dans Immich ; "
-                      f"{len(en_attente)} avec un écart à régler ; {etats.get('vue', 0) + etats.get('envoyee', 0)} pas encore passés ; "
+                      f"{len(en_attente)} avec un écart à régler ; "
+                      + (f"{etats['envoyee']} envoyés, pas encore contrôlés ; " if etats.get("envoyee") else "")
+                      + f"{etats.get('vue', 0)} pas encore envoyés ; "
                       f"{inconnus} qu'Immich ne connaît pas (ils resteront dans le dossier).",
             "echantillon": [{"nouveau": l["nouveau_id"], "fichier": l["rel"]} for l in pretes[:: max(1, len(pretes) // 5)][:5]],
         }

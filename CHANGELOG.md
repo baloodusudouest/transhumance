@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.1.4 — 12 novembre 2026
+- Le bilan distingue les photos « envoyées, pas encore contrôlées » de celles « pas encore envoyées » : pendant un lot, il ne laisse plus croire que rien n'est passé.
+- Le compteur repart de zéro pour le contrôle, au lieu de rester sur le total de l'envoi.
+- iPhone : le bouton « Défaire ce dossier » ne dépasse plus du cadre.
+
 ## 0.1.3 — 12 novembre 2026
 - Décocher un dossier qu'on avait coché en entier depuis un choix partiel rend ce choix, au lieu de tout décocher. « tout décocher », à côté du compte, vide le dossier d'un clic.
 

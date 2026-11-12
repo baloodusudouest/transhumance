@@ -133,10 +133,10 @@
           <div class="mt-2"><Button variant="destructive" onclick={supprimer} disabled={!confirme || !!attente || lectureSeule}>
             {attente === 'supprimer' ? 'Suppression…' : `Supprimer les ${bilan.a_supprimer} originaux`}</Button></div>
         {:else}
-          <p class="text-sm">Pas encore supprimable : {bilan.a_supprimer ? 'un écart reste à régler, ou des photos ne sont pas passées.' : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
+          <p class="text-sm">Pas encore supprimable : {bilan.a_supprimer ? (tache.en_cours ? 'le contrôle est en cours, reviens quand le lot est fini.' : bilan.etats.envoyee ? 'des photos envoyées attendent leur contrôle : relance « Faire passer ».' : 'un écart reste à régler, ou des photos ne sont pas passées.') : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
         {/if}
         {#if (bilan.etats.prete || 0) + (bilan.etats.ecart || 0) + (bilan.etats.envoyee || 0)}
-          <div class="mt-3"><Button variant="outline" onclick={defaire} disabled={!!attente || tache.en_cours || lectureSeule}>Défaire ce dossier (retirer les copies d'Immich)</Button></div>
+          <div class="mt-3"><Button variant="outline" class="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left" onclick={defaire} disabled={!!attente || tache.en_cours || lectureSeule}>Défaire ce dossier (retirer les copies d'Immich)</Button></div>
         {/if}
       </div>
     </section>
