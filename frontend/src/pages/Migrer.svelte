@@ -106,6 +106,14 @@
         </ul>
       {/if}
 
+      {#if bilan.fichiers_inconnus.length}
+        <details class="mt-4 text-sm">
+          <summary class="etiquette cursor-pointer">Fichiers qu'Immich ne connaît pas ({bilan.inconnus}) — ils restent dans le dossier</summary>
+          <ul class="mt-1 max-h-60 overflow-auto">{#each bilan.fichiers_inconnus as f}<li class="break-all">{f}</li>{/each}</ul>
+          {#if bilan.inconnus > bilan.fichiers_inconnus.length}<p class="text-muted-foreground">Les {bilan.fichiers_inconnus.length} premiers sont montrés.</p>{/if}
+        </details>
+      {/if}
+
       {#if bilan.echantillon.length}
         <h3 class="etiquette mt-4">À ouvrir dans Immich avant de supprimer</h3>
         <ul class="mt-1 text-sm">
@@ -147,11 +155,15 @@
         <button type="button" class="pli" aria-expanded={ouverts.has(n.chemin)} aria-label={(ouverts.has(n.chemin) ? 'Replier ' : 'Déplier ') + n.nom} onclick={() => basculer(n.chemin)}>
           <ChevronRight class="size-4 transition-transform {ouverts.has(n.chemin) ? 'rotate-90' : ''}" aria-hidden="true" /></button>
       {:else}<span class="pli" aria-hidden="true"></span>{/if}
-      <input type="checkbox" class="size-5 flex-none accent-[var(--app)]" checked={n.coche} disabled={n.exclu || tache.en_cours} aria-label={'Cocher ' + n.nom}
-             onchange={(e) => regler(n.chemin, { coche: e.currentTarget.checked })} />
+      <!-- Case pleine : tout ce dossier est coché. Case barrée d'un trait : une partie seulement, dans ses sous-dossiers. -->
+      <input type="checkbox" class="size-5 flex-none accent-[var(--app)]" checked={n.selection === 'tout'} indeterminate={n.selection === 'partiel'}
+             disabled={n.exclu || tache.en_cours || !n.a_cocher}
+             aria-label={'Cocher ' + n.nom} aria-checked={n.selection === 'partiel' ? 'mixed' : n.selection === 'tout'}
+             title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}
+             onchange={(e) => regler(n.chemin, { coche: n.selection === 'partiel' ? true : e.currentTarget.checked })} />
       <span class="min-w-0 flex-1">
         <span class="block truncate font-medium">{n.nom}{#if n.exclu}&nbsp;<span class="font-normal text-muted-foreground">· jamais migré</span>{/if}</span>
-        <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {poids(n.poids)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}</span>
+        <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {poids(n.poids)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}{n.selection === 'partiel' ? ` · ${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}</span>
       </span>
       {#if n.ici && !n.exclu}
         <input class="album" aria-label={'Album pour ' + n.nom} placeholder="pas d'album" value={n.album || ''} disabled={tache.en_cours}

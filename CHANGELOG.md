@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.1.2 — 12 novembre 2026
+- La case d'un dossier montre ce qui est coché en dessous : pleine quand tout l'est, barrée d'un trait quand une partie seulement de ses sous-dossiers l'est (avec le compte à côté). Cliquer une case barrée coche tout le dossier.
+- Le bilan liste les fichiers qu'Immich ne connaît pas (ils restent dans le dossier).
+- Corrigé : le nombre de fichiers inconnus affiché à la racine oubliait ceux posés directement à la racine.
+
 ## 0.1.1 — 12 novembre 2026
 - Icône de l'appli : une montagne et le chemin du troupeau.
 - Inventaire : le parcours du dossier des photos ne s'arrête plus sur un dossier illisible et n'entre plus dans les dossiers techniques du NAS ; l'inventaire d'Immich est enregistré avant ce parcours.

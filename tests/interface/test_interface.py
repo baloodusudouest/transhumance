@@ -69,7 +69,14 @@ def test_1_l_arbre_propose_les_albums(page):
 
 
 def test_2_cocher_une_annee_et_la_faire_passer(page):
-    page.get_by_role("checkbox", name="Cocher 2019", exact=True).check()
+    # 0.1.2 : cocher un seul sous-dossier barre la case de ses parents d'un trait
+    page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True).check()
+    parent = page.get_by_role("checkbox", name="Cocher 2019", exact=True)
+    page.wait_for_function("el => el.indeterminate", arg=parent.element_handle())
+    assert "1 sous-dossier(s) cochés sur 2" in ligne(page, "2019").inner_text()
+    assert page.get_by_role("checkbox", name="Cocher Pellicule", exact=True).evaluate("el => el.indeterminate")
+    parent.click()                                                   # cliquer une case barrée coche tout le dossier
+    page.wait_for_function("el => el.checked && !el.indeterminate", arg=parent.element_handle())
     passer = page.get_by_role("button", name=re.compile(r"Faire passer les dossiers cochés \(2\)"))
     passer.wait_for()
     page.get_by_label("Album pour 2019-08-12 Vendanges").fill("Vendanges 2019")

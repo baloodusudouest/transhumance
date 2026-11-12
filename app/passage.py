@@ -92,6 +92,7 @@ class Transhumance:
         # dossiers techniques du NAS (@eaDir contient plusieurs vignettes par photo).
         connus = {l["rel"] for l in self.base.tous("SELECT rel FROM photos")}
         inconnus: dict[str, int] = {}
+        liste: list[tuple[str, str]] = []
         racine = str(self.cfg.photos)
         for dossier, sous, fichiers in os.walk(racine, onerror=lambda e: log.warning("Dossier illisible, sauté : %s", e.filename)):
             sous[:] = [d for d in sous if d not in IGNORES and not d.startswith(".")]
@@ -102,6 +103,9 @@ class Transhumance:
                 rel = nom if rel_dossier == "." else f"{rel_dossier}/{nom}"
                 if rel not in connus:
                     inconnus[rel_dossier] = inconnus.get(rel_dossier, 0) + 1
+                    liste.append((rel, rel_dossier))
+        self.base.executer("DELETE FROM inconnus")
+        self.base.plusieurs("INSERT OR IGNORE INTO inconnus(rel, dossier) VALUES (?,?)", liste)
         self.base.executer("UPDATE dossiers SET inconnus = 0")
         for d, n in inconnus.items():
             self.base.executer("INSERT INTO dossiers(chemin, inconnus) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET inconnus = excluded.inconnus", (d, n))
@@ -184,14 +188,34 @@ class Transhumance:
                 if c in (".", ""):
                     break
                 c = str(PurePosixPath(c).parent)
+        # Fichiers inconnus d'Immich : le nombre de chaque dossier remonte à ses parents, une seule fois
+        for n in noeuds.values():
+            n["inconnus"] = 0
         for chemin, r in reglages.items():
-            if r["inconnus"] and chemin in noeuds:
-                c = str(PurePosixPath(chemin).parent)
-                while c in noeuds:
+            if not r["inconnus"]:
+                continue
+            c = chemin
+            while True:
+                if c in noeuds:
                     noeuds[c]["inconnus"] += r["inconnus"]
-                    if c in (".", ""):
-                        break
-                    c = str(PurePosixPath(c).parent)
+                if c in (".", ""):
+                    break
+                c = str(PurePosixPath(c).parent)
+        # 0.1.2 : la case d'un dossier dit ce qui est coché en dessous — tout, une partie, ou rien
+        for n in noeuds.values():
+            n["a_cocher"], n["coches"] = 0, 0
+        for chemin, n in noeuds.items():
+            if not n["ici"] or n["exclu"]:
+                continue
+            c = chemin
+            while True:
+                noeuds[c]["a_cocher"] += 1
+                noeuds[c]["coches"] += int(n["coche"])
+                if c in (".", ""):
+                    break
+                c = str(PurePosixPath(c).parent)
+        for n in noeuds.values():
+            n["selection"] = "rien" if not n["coches"] else "tout" if n["coches"] == n["a_cocher"] else "partiel"
         for n in noeuds.values():
             n["enfants"].sort(key=str.casefold)
         return {"racine": ".", "noeuds": noeuds, "inventaire": self.base.lire("inventaire"),
@@ -430,6 +454,9 @@ class Transhumance:
         return {
             "chemin": chemin, "fichiers": len(visibles), "etats": etats, "deja_la": deja, "visages": visages, "ecarts": ecarts,
             "inconnus": inconnus, "a_supprimer": len(pretes),
+            "fichiers_inconnus": [l["rel"] for l in (self.base.tous("SELECT rel FROM inconnus ORDER BY rel LIMIT 300") if chemin in (".", "")
+                                  else self.base.tous("SELECT rel FROM inconnus WHERE dossier = ? OR dossier LIKE ? ORDER BY rel LIMIT 300",
+                                                      (chemin, chemin.replace("%", "") + "/%")))],
             "supprimable": bool(pretes) and not en_attente and not etats.get("vue") and not etats.get("envoyee"),
             "phrase": f"{len(visibles)} fichiers dans ce dossier ; {len(pretes) + etats.get('supprimee', 0)} retrouvés identiques dans Immich ; "
                       f"{len(en_attente)} avec un écart à régler ; {etats.get('vue', 0) + etats.get('envoyee', 0)} pas encore passés ; "

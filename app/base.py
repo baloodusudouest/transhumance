@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS photos (
 );
 CREATE INDEX IF NOT EXISTS photos_dossier ON photos(dossier);
 CREATE TABLE IF NOT EXISTS dossiers (chemin TEXT PRIMARY KEY, album TEXT, coche INTEGER NOT NULL DEFAULT 0, inconnus INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS inconnus (rel TEXT PRIMARY KEY, dossier TEXT NOT NULL);   -- fichiers du dossier qu'Immich ne connaît pas
 CREATE TABLE IF NOT EXISTS journal (id INTEGER PRIMARY KEY AUTOINCREMENT, le TEXT NOT NULL, quoi TEXT NOT NULL, detail TEXT);
 CREATE TABLE IF NOT EXISTS reglages (cle TEXT PRIMARY KEY, valeur TEXT);
 """

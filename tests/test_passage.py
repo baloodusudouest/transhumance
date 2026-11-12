@@ -88,6 +88,30 @@ def test_noms_d_albums_proposes(monde):
     assert t.album_de("Albums/Voyages/Italie 2019") == "Voyages – Italie 2019"
 
 
+def test_la_case_d_un_parent_dit_tout_partiel_ou_rien(monde):
+    t, im, ids, photos = monde
+    n = t.arbre()["noeuds"]
+    assert {n[c]["selection"] for c in n} == {"rien"}
+    t.regler_dossier("Pellicule/2020/2020-06-10", coche=True)
+    n = t.arbre()["noeuds"]
+    assert n["Pellicule/2020/2020-06-10"]["selection"] == "tout"
+    assert n["Pellicule/2020"]["selection"] == n["Pellicule"]["selection"] == n["."]["selection"] == "partiel"
+    assert (n["Pellicule/2020"]["coches"], n["Pellicule/2020"]["a_cocher"]) == (1, 2)
+    assert n["Albums"]["selection"] == "rien" and n["Scans"]["a_cocher"] == 0          # exclu : rien à cocher
+    t.regler_dossier("Pellicule/2020", coche=True)
+    n = t.arbre()["noeuds"]
+    assert n["Pellicule/2020"]["selection"] == "tout" and n["Pellicule"]["selection"] == "partiel"
+    t.regler_dossier(".", coche=True)
+    assert t.arbre()["noeuds"]["."]["selection"] == "tout"                              # tout, sauf l'exclu
+    # Fichiers inconnus : comptés une fois, à chaque niveau, et listés dans le bilan
+    (photos / "orphelin.jpg").write_bytes(b"x")
+    t.inventaire()
+    n = t.arbre()["noeuds"]
+    assert n["."]["inconnus"] == 2 and n["Pellicule"]["inconnus"] == 1 and n["Albums"]["inconnus"] == 0
+    assert t.bilan(".")["fichiers_inconnus"] == ["Pellicule/2020/2020-05-01 Fête au jardin/pas-dans-immich.jpg", "orphelin.jpg"]
+    assert t.bilan("Pellicule/2020")["fichiers_inconnus"] == ["Pellicule/2020/2020-05-01 Fête au jardin/pas-dans-immich.jpg"]
+
+
 def test_cocher_un_parent_coche_ses_enfants_sauf_les_exclus(monde):
     t = monde[0]
     t.regler_dossier(".", coche=True)
