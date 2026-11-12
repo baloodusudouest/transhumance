@@ -320,8 +320,25 @@ def client(monde):
     main.ETAT.clear()
 
 
+def test_la_reconnaissance_dit_qui_travaille(monde):
+    t, im = monde[0], monde[1]
+    avant = list(im.ecrits)
+    r = t.reconnaissance(repond=lambda u: True)
+    assert r["lisible"] and r["active"] and r["utilisee"] == 0 and r["sur_pc"]
+    assert [a["nas"] for a in r["adresses"]] == [False, True]
+    assert {"nom": "Lecture du texte (OCR)", "attente": 99, "en_cours": 1} in r["files"]
+    r = t.reconnaissance(repond=lambda u: "pc-invente" not in u)                # PC éteint : Immich retombe sur le NAS
+    assert r["utilisee"] == 1 and not r["sur_pc"]
+    r = t.reconnaissance(repond=lambda u: False)
+    assert r["utilisee"] is None and not r["sur_pc"]
+    im.reconnaissance = None                                                    # clé sans le droit de lire les réglages
+    r = t.reconnaissance(repond=lambda u: True)
+    assert not r["lisible"] and "systemConfig.read" in r["raison"] and r["files"]
+    assert im.ecrits == avant                                                   # rien n'est écrit dans Immich
+
+
 def test_tout_est_ferme_sans_session(client):
-    for chemin in ("/api/arbre", "/api/bilan", "/api/connexions", "/api/lot"):
+    for chemin in ("/api/arbre", "/api/bilan", "/api/connexions", "/api/lot", "/api/reconnaissance"):
         assert client.get(chemin).status_code == 401, chemin
     for chemin in ("/api/inventaire", "/api/dossier", "/api/migrer", "/api/supprimer", "/api/defaire", "/api/accepter"):
         assert client.post(chemin, json={}).status_code == 401, chemin

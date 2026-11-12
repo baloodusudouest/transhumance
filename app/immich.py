@@ -96,6 +96,26 @@ class Immich:
     def albums_de(self, ident: str) -> list[dict]:
         return self._appel("GET", "/albums", "la lecture des albums d'une photo", params={"assetId": ident})
 
+    def reglages_reconnaissance(self) -> dict | None:
+        """Réglages « machine learning » d'Immich (adresses essayées dans l'ordre). None si la clé n'a pas le droit de les lire."""
+        try:
+            r = self.client.get("/system-config")
+        except httpx.HTTPError as exc:
+            raise ErreurImmich(f"Immich injoignable pendant la lecture de ses réglages ({exc.__class__.__name__}).") from exc
+        if r.status_code in (401, 403):
+            return None
+        if r.status_code >= 400:
+            raise ErreurImmich(f"Immich a refusé la lecture de ses réglages ({r.status_code}).")
+        return (r.json() or {}).get("machineLearning") or {}
+
+    def files(self) -> dict[str, dict]:
+        """Ce qui attend et ce qui tourne, file par file."""
+        sortie = {}
+        for q in self._appel("GET", "/queues", "la lecture des files"):
+            s_ = q.get("statistics") or {}
+            sortie[q.get("name")] = {"attente": int(s_.get("waiting", 0)) + int(s_.get("delayed", 0)), "en_cours": int(s_.get("active", 0))}
+        return sortie
+
     def files_occupees(self, noms: tuple[str, ...]) -> int:
         """Nombre de tâches en attente ou en cours dans les files qui comptent pour une photo neuve."""
         total = 0

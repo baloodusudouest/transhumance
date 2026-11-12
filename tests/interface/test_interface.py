@@ -110,3 +110,13 @@ def test_3_le_bilan_puis_le_clic(page, monde):
     assert (photos / "Pellicule/2019/2019-08-12 Vendanges/inconnu.jpg").is_file()        # l'inconnu d'Immich reste
     assert len(list((photos / "Pellicule/2020").rglob("IMG_*.jpg"))) == 3                # l'autre année n'a pas bougé
     assert "6 originaux supprimés" in ligne(page, "2019").inner_text()
+
+
+def test_4_la_reconnaissance_dit_qui_travaille(page):
+    assert "reconnaissance" in page.locator("#reconnaissance-courte").inner_text().lower()
+    page.get_by_role("link", name="Connexion").click()
+    bloc = page.get_by_role("region", name="Reconnaissance d'Immich")
+    bloc.get_by_role("list", name="Adresses essayées par Immich").wait_for()
+    texte = bloc.inner_text()
+    assert "1. PC" in texte and "2. NAS" in texte and "Lecture du texte (OCR)" in texte
+    assert "ne répond pas" in texte                                   # adresses inventées : personne ne répond

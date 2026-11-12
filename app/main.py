@@ -116,6 +116,12 @@ def bilan(chemin: str = "."):
     return t().bilan(chemin)
 
 
+@app.get("/api/reconnaissance")
+def reconnaissance():
+    """0.1.5 : Immich fait-il travailler le PC ? Lecture seule, relue toutes les dix secondes par l'écran."""
+    return t().reconnaissance()
+
+
 @app.get("/api/connexions")
 def connexions():
     cfg = ETAT["cfg"]

@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 0.1.5 — 12 novembre 2026
+- **Reconnaissance d'Immich : le PC ou le NAS ?** Dans Connexion, une tuile liste les adresses qu'Immich essaie dans l'ordre, dit laquelle répond (donc laquelle travaille), et montre ce qui attend dans les files : visages, personnes, recherche intelligente, texte (OCR), doublons. Une ligne le résume sur l'écran Migrer. Relu toutes les dix secondes, en lecture seule.
+
 ## 0.1.4 — 12 novembre 2026
 - Le bilan distingue les photos « envoyées, pas encore contrôlées » de celles « pas encore envoyées » : pendant un lot, il ne laisse plus croire que rien n'est passé.
 - Le compteur repart de zéro pour le contrôle, au lieu de rester sur le total de l'envoi.

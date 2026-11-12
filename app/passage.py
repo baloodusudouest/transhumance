@@ -13,6 +13,8 @@ import re
 import time
 from pathlib import Path, PurePosixPath
 
+import httpx
+
 from .base import Base, maintenant
 from .config import Config
 from .immich import ErreurImmich, Immich, empreinte
@@ -47,6 +49,42 @@ class Transhumance:
 
     def immich(self) -> Immich:
         return Immich(self.cfg.immich_url, self.cfg.immich_cle, self.cfg.lecture_seule, self._transport)
+
+    # 0.1.5 : qui fait la reconnaissance (visages, recherche, texte) — le NAS ou le PC ?
+    FILES_RECONNAISSANCE = (("faceDetection", "Détection des visages"), ("facialRecognition", "Reconnaissance des personnes"),
+                            ("smartSearch", "Recherche intelligente"), ("ocr", "Lecture du texte (OCR)"),
+                            ("duplicateDetection", "Détection des doublons"))
+
+    @staticmethod
+    def _repond(adresse: str) -> bool:
+        """Le service de reconnaissance à cette adresse répond-il ? (Même question que celle d'Immich.)"""
+        try:
+            return httpx.get(adresse.rstrip("/") + "/ping", timeout=3).status_code == 200
+        except httpx.HTTPError:
+            return False
+
+    def reconnaissance(self, repond=None) -> dict:
+        """Lecture seule. Immich essaie ses adresses dans l'ordre : la première qui répond travaille."""
+        repond = repond or self._repond
+        im = self.immich()
+        try:
+            reglages = im.reglages_reconnaissance()
+            files = im.files()
+        except ErreurImmich as exc:
+            return {"lisible": False, "raison": str(exc), "adresses": [], "files": []}
+        finally:
+            im.fermer()
+        lignes = [{"nom": nom, **files[cle]} for cle, nom in self.FILES_RECONNAISSANCE if cle in files]
+        if reglages is None:
+            return {"lisible": False, "files": lignes, "adresses": [],
+                    "raison": "La clé d'API de Transhumance n'a pas le droit de lire les réglages d'Immich (permission « systemConfig.read », clé d'un compte administrateur)."}
+        adresses = []
+        for u in reglages.get("urls") or ([reglages["url"]] if reglages.get("url") else []):
+            hote = (httpx.URL(u).host or "").lower()
+            adresses.append({"adresse": u, "nas": "immich" in hote and "machine" in hote, "repond": repond(u)})
+        utilisee = next((i for i, a in enumerate(adresses) if a["repond"]), None)
+        return {"lisible": True, "active": bool(reglages.get("enabled", True)), "adresses": adresses, "utilisee": utilisee,
+                "sur_pc": utilisee is not None and not adresses[utilisee]["nas"], "files": lignes}
 
     def exiger_ecriture(self) -> None:
         if self.cfg.lecture_seule:

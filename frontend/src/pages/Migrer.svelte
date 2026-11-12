@@ -1,4 +1,5 @@
 <script>
+  import Reconnaissance from '$lib/Reconnaissance.svelte'
   // « Migrer » : l'arborescence des dossiers. On coche, on règle le nom de l'album, on fait passer,
   // on lit le bilan, puis — seulement là — on supprime les originaux prouvés copiés.
   import { onMount, onDestroy } from 'svelte'
@@ -76,6 +77,7 @@
     {:else if tache.erreur}
       <p class="mt-2 text-sm font-medium" role="alert">Lot interrompu : {tache.erreur}</p>
     {:else if tache.message}<p class="mt-2 text-sm" role="status" id="tache">{tache.message}</p>{/if}
+    <Reconnaissance court {ondeconnecte} />
   </section>
   {#if message}<p class="mb-3 text-sm" role="status" id="message">{message}</p>{/if}
 

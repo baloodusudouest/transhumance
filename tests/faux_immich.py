@@ -30,7 +30,8 @@ class FauxImmich:
         self.files_restantes = 0
         self.libre = 10 ** 12
         self.n = 0
-        self.abimer: set[str] = set()          # noms de fichiers dont la copie sera abîmée au rangement
+        self.abimer: set[str] = set()
+        self.reconnaissance: dict | None = {"enabled": True, "urls": ["http://pc-invente:3003", "http://immich-machine-learning:3003"]}          # noms de fichiers dont la copie sera abîmée au rangement
 
     def _id(self, prefixe: str) -> str:
         self.n += 1
@@ -74,6 +75,8 @@ class FauxImmich:
             return httpx.Response(200, json={"diskAvailableRaw": self.libre})
         if chemin == "/libraries":
             return httpx.Response(200, json=[{"id": "lib-1", "name": "Externe", "importPaths": [RACINE]}])
+        if chemin == "/system-config":
+            return httpx.Response(200, json={"machineLearning": self.reconnaissance}) if self.reconnaissance is not None else httpx.Response(403)
         if chemin == "/queues":
             reste, self.files_restantes = self.files_restantes, max(0, self.files_restantes - 1)
             return httpx.Response(200, json=[{"name": "faceDetection", "statistics": {"waiting": reste, "active": 0}},

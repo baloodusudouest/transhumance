@@ -4,6 +4,7 @@
   import { api } from '$lib/api.js'
   import { poids, quand } from '$lib/format.js'
   import { Button } from '$lib/components/ui/button/index.js'
+  import Reconnaissance from '$lib/Reconnaissance.svelte'
 
   let { deconnecter, ondeconnecte } = $props()
   let d = $state(null)
@@ -32,6 +33,7 @@
       <p class="mt-2 text-sm text-muted-foreground">Transhumance n'y écrit rien : elle y supprime seulement, sur ton clic, les fichiers prouvés copiés.
         {d.dossier.exclus.length ? `Jamais migrés : ${d.dossier.exclus.join(', ')}.` : ''}</p>
     </section>
+    <Reconnaissance {ondeconnecte} />
   </div>
   <div class="mt-3"><Button variant="outline" onclick={lire}>Vérifier</Button></div>
 
