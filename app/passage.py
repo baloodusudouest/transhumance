@@ -46,6 +46,7 @@ class Transhumance:
     def __init__(self, cfg: Config, base: Base, transport=None):
         self.cfg, self.base, self._transport = cfg, base, transport
         self.tache: dict = {"en_cours": False, "message": "", "fait": 0, "total": 0, "erreur": None}
+        self.suppression: dict = {"en_cours": False, "dossier": "", "fait": 0, "total": 0, "etape": ""}
 
     def immich(self) -> Immich:
         return Immich(self.cfg.immich_url, self.cfg.immich_cle, self.cfg.lecture_seule, self._transport)
@@ -563,16 +564,24 @@ class Transhumance:
         self.exiger_ecriture()
         if self.tache["en_cours"]:
             raise Refus("Un lot est en cours : attends sa fin.", 409)
+        if self.suppression["en_cours"]:
+            raise Refus("Une suppression est déjà en cours : attends sa fin.", 409)
         b = self.bilan(chemin)
         if not b["supprimable"]:
             raise Refus("Ce dossier n'est pas prêt : des photos ne sont pas passées, ou un écart n'est pas réglé.", 409)
         im = self.immich()
         faits, retires, gardes = 0, [], 0
+
+        def eligible(l) -> bool:
+            bloquant = any(ECARTS[e][1] for e in json.loads(l["ecarts"]))
+            return l["etat"] == "prete" or (l["etat"] == "ecart" and bool(l["accepte"]) and not bloquant)
+
+        a_faire = [l for l in self._photos_sous(chemin) if eligible(l)]
+        # 0.1.8 : l'avancement, lu par l'écran pendant que le clic travaille
+        self.suppression = {"en_cours": True, "dossier": chemin, "fait": 0, "total": len(a_faire), "etape": "fichiers"}
         try:
-            for l in self._photos_sous(chemin):
-                bloquant = any(ECARTS[e][1] for e in json.loads(l["ecarts"]))
-                if not (l["etat"] == "prete" or (l["etat"] == "ecart" and l["accepte"] and not bloquant)):
-                    continue
+            for l in a_faire:
+                self.suppression["fait"] += 1
                 copie = im.photo(l["nouveau_id"]) if l["nouveau_id"] else None
                 fichier = self._fichier(l["rel"])
                 # Dernière preuve, au moment de supprimer : la copie existe et le fichier n'a pas changé depuis l'envoi
@@ -590,8 +599,10 @@ class Transhumance:
                 self._etat(l["ancien_id"], "supprimee")
                 faits += 1
             if retires:
+                self.suppression["etape"] = "immich"
                 im.retirer(retires)
         finally:
+            self.suppression = {**self.suppression, "en_cours": False}
             im.fermer()
             self.base.noter("Originaux supprimés", {"dossier": chemin, "supprimes": faits, "gardes": gardes})
             self.exporter()

@@ -220,8 +220,11 @@ def test_supprimer_ne_supprime_que_ce_qui_est_prouve(monde):
     b = t.bilan("Pellicule/2020")
     assert b["supprimable"] and b["a_supprimer"] == 3 and b["inconnus"] == 1 and len(b["echantillon"]) == 3
     assert "3 fichiers" in b["phrase"] and "1 qu'Immich ne connaît pas" in b["phrase"]
+    assert t.suppression == {"en_cours": False, "dossier": "", "fait": 0, "total": 0, "etape": ""}
     r = t.supprimer("Pellicule/2020")
     assert r == {"supprimes": 3, "gardes": 0, "bilan": r["bilan"]}
+    # 0.1.8 : l'avancement a été tenu jusqu'au bout, puis rendu
+    assert t.suppression == {"en_cours": False, "dossier": "Pellicule/2020", "fait": 3, "total": 3, "etape": "immich"}
     # Les originaux passés sont partis, avec leur fichier d'accompagnement
     assert not (dossier / "IMG_0001.jpg").exists() and not (dossier / "IMG_0001.jpg.xmp").exists()
     assert not (photos / "Pellicule/2020/2020-06-10/IMG_0003.jpg").exists()
@@ -358,7 +361,7 @@ def test_la_reconnaissance_dit_qui_travaille(monde):
 
 
 def test_tout_est_ferme_sans_session(client):
-    for chemin in ("/api/arbre", "/api/bilan", "/api/connexions", "/api/lot", "/api/reconnaissance"):
+    for chemin in ("/api/arbre", "/api/bilan", "/api/connexions", "/api/lot", "/api/reconnaissance", "/api/suppression"):
         assert client.get(chemin).status_code == 401, chemin
     for chemin in ("/api/inventaire", "/api/dossier", "/api/migrer", "/api/supprimer", "/api/defaire", "/api/accepter"):
         assert client.post(chemin, json={}).status_code == 401, chemin

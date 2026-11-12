@@ -35,8 +35,14 @@
   const migrer = () => faire('migrer', async () => { await api.post('/api/migrer'); await lire() })
   const voirBilan = (chemin) => faire('bilan', async () => { bilan = await api.get('/api/bilan?chemin=' + encodeURIComponent(chemin)); confirme = false })
   const accepter = (e, oui) => faire('', async () => { await api.post('/api/accepter', { ancien: e.ancien, oui }); await voirBilan(bilan.chemin) })
+  // 0.1.8 : pendant que le clic travaille, l'écran relit l'avancement chaque seconde
+  let avancee = $state(null)
+  let ailleurs = $state(null)
   const supprimer = () => faire('supprimer', async () => {
-    const r = await api.post('/api/supprimer', { chemin: bilan.chemin, nombre: bilan.a_supprimer })
+    avancee = { fait: 0, total: bilan.a_supprimer, etape: 'fichiers' }
+    const veille = setInterval(async () => { try { const s = await api.get('/api/suppression'); if (s.en_cours) avancee = s } catch { /* la barre attend */ } }, 1000)
+    let r
+    try { r = await api.post('/api/supprimer', { chemin: bilan.chemin, nombre: bilan.a_supprimer }) } finally { clearInterval(veille); avancee = null }
     bilan = r.bilan; confirme = false; await lire()
     message = `${r.supprimes} original(aux) supprimé(s)` + (r.gardes ? `, ${r.gardes} gardé(s) parce que la copie ou le fichier avait changé.` : '.')
   })
@@ -56,7 +62,11 @@
   const fini = (n) => (n.photos + n.videos) > 0 && (n.etats.supprimee || 0) === n.photos + n.videos
   const avance = (n) => (n.photos + n.videos) ? ((n.etats.prete || 0) + (n.etats.supprimee || 0)) / (n.photos + n.videos) : 0
 
-  onMount(async () => { await lire(); minuteur = setInterval(() => { if (a?.tache?.en_cours) lire() }, 2000) })
+  onMount(async () => { await lire(); minuteur = setInterval(async () => {
+    if (a?.tache?.en_cours) lire()
+    // une suppression lancée depuis une page fermée ou coupée continue : on la montre quand même
+    if (attente !== 'supprimer') { try { const s = await api.get('/api/suppression'); ailleurs = s.en_cours ? s : null } catch { ailleurs = null } }
+  }, 2000) })
   onDestroy(() => clearInterval(minuteur))
 </script>
 
@@ -82,6 +92,7 @@
     {:else if tache.erreur}
       <p class="mt-2 text-sm font-medium" role="alert">Lot interrompu : {tache.erreur}</p>
     {:else if tache.message}<p class="mt-2 text-sm" role="status" id="tache">{tache.message}</p>{/if}
+    {#if ailleurs}<p class="mt-2 text-sm" role="status" id="suppression-en-cours">Suppression en cours dans « {ailleurs.dossier} » : {ailleurs.fait} sur {ailleurs.total}.</p>{/if}
     <Reconnaissance court {ondeconnecte} />
   </section>
   {#if message}<p class="mb-3 text-sm" role="status" id="message">{message}</p>{/if}
@@ -141,6 +152,15 @@
             J'ai ouvert des photos de ce lot dans Immich, elles sont bonnes.</label>
           <div class="mt-2"><Button variant="destructive" onclick={supprimer} disabled={!confirme || !!attente || lectureSeule}>
             {attente === 'supprimer' ? 'Suppression…' : `Supprimer les ${bilan.a_supprimer} originaux`}</Button></div>
+          {#if avancee}
+            <div class="mt-3" id="avancee">
+              <div class="barre" role="progressbar" aria-label="Suppression des originaux" aria-valuemin="0" aria-valuemax={avancee.total} aria-valuenow={avancee.fait}>
+                <div class="rempli" style:width="{avancee.total ? Math.round(100 * avancee.fait / avancee.total) : 0}%"></div></div>
+              <p class="mt-1 text-sm text-muted-foreground" role="status">{avancee.etape === 'immich'
+                ? `Fichiers traités (${avancee.total}). Retrait des anciennes photos d'Immich…`
+                : `${avancee.fait} sur ${avancee.total} : chaque copie est relue, puis l'original est supprimé. Ne ferme pas cette page.`}</p>
+            </div>
+          {/if}
         {:else}
           <p class="text-sm">Pas encore supprimable : {bilan.a_supprimer ? (tache.en_cours ? 'le contrôle est en cours, reviens quand le lot est fini.' : bilan.etats.envoyee ? 'des photos envoyées attendent leur contrôle : relance « Faire passer ».' : 'un écart reste à régler, ou des photos ne sont pas passées.') : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
         {/if}
@@ -195,6 +215,8 @@
 {/snippet}
 
 <style>
+  .barre { height: 0.6rem; border-radius: 9999px; background: var(--border); overflow: hidden; }
+  .rempli { height: 100%; border-radius: 9999px; background: var(--destructive, #c8553d); transition: width 0.4s ease; }
   /* Signature : un trait vert descend le long de ce qui est passé */
   .noeud { border-left: 3px solid color-mix(in srgb, var(--app) calc(var(--avance) * 100%), transparent); }
   .ligne { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.5rem; border-radius: 0.6rem; }

@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 0.1.8 — 13 novembre 2026
+- **Une barre pendant la suppression des originaux** : elle se remplit photo par photo (« 412 sur 2006 »), puis annonce le retrait des anciennes photos d'Immich. Deux suppressions ne peuvent plus tourner en même temps.
+
 ## 0.1.7 — 12 novembre 2026
 - **Après la suppression, le dossier est rangé.** Le bilan dit « Terminé » au lieu de « Pas encore supprimable ». Un dossier dont tous les originaux sont supprimés quitte l'arbre (un lien « Afficher » le remontre) et n'est plus compté dans « Faire passer les dossiers cochés ». Un dossier où il reste des fichiers inconnus d'Immich reste visible.
 

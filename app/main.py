@@ -204,6 +204,12 @@ def supprimer(corps: dict = Body(...)):
     return tr.supprimer(chemin)
 
 
+@app.get("/api/suppression")
+def suppression():
+    """0.1.8 : où en est la suppression en cours (lu chaque seconde par l'écran). Ne lit pas la base."""
+    return t().suppression
+
+
 @app.post("/api/defaire")
 def defaire(corps: dict = Body(...)):
     return t().defaire(str(corps.get("chemin", "")))
