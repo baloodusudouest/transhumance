@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.1.6 — 12 novembre 2026
+- **Correction** : « Immich a refusé le rattachement d'un visage (400) ». Transhumance inversait la personne et le visage dans la demande ; vérifié dans le code d'Immich. Le faux Immich des tests se comporte maintenant comme le vrai sur ce point.
+- Un visage qu'Immich refuse de rattacher ne coupe plus le lot : la photo part en écart, les autres continuent.
+
 ## 0.1.5 — 12 novembre 2026
 - **Reconnaissance d'Immich : le PC ou le NAS ?** Dans Connexion, une tuile liste les adresses qu'Immich essaie dans l'ordre, dit laquelle répond (donc laquelle travaille), et montre ce qui attend dans les files : visages, personnes, recherche intelligente, texte (OCR), doublons. Une ligne le résume sur l'écran Migrer. Relu toutes les dix secondes, en lecture seule.
 

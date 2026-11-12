@@ -180,7 +180,9 @@ class Immich:
 
     def reaffecter_visage(self, visage: str, personne: str) -> None:
         self._garde()
-        self._appel("PUT", f"/faces/{visage}", "le rattachement d'un visage", json={"id": personne})
+        # 0.1.6 : dans l'API d'Immich, l'adresse porte la PERSONNE et le corps porte le visage
+        # (lu dans face.controller.ts). L'inverse, écrit jusqu'à la 0.1.5, était refusé (400).
+        self._appel("PUT", f"/faces/{personne}", "le rattachement d'un visage", json={"id": visage})
 
     def creer_visage(self, photo: str, personne: str, v: dict) -> None:
         self._garde()

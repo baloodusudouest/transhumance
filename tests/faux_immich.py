@@ -31,6 +31,7 @@ class FauxImmich:
         self.libre = 10 ** 12
         self.n = 0
         self.abimer: set[str] = set()
+        self.personnes_refusees: set[str] = set()   # personnes dont Immich refuse le rattachement
         self.reconnaissance: dict | None = {"enabled": True, "urls": ["http://pc-invente:3003", "http://immich-machine-learning:3003"]}          # noms de fichiers dont la copie sera abîmée au rangement
 
     def _id(self, prefixe: str) -> str:
@@ -97,10 +98,14 @@ class FauxImmich:
                                                "sourceType": "manual"})
             return httpx.Response(201, json={})
         if (mm := re.fullmatch(r"/faces/([^/]+)", chemin)) and m == "PUT":
-            for liste in self.visages.values():
-                for f in liste:
-                    if f["id"] == mm.group(1):
-                        f["person"] = {"id": self._json(r)["id"], "name": ""}
+            # Comme le vrai Immich : l'adresse porte la personne, le corps porte le visage
+            personne, visage = mm.group(1), self._json(r)["id"]
+            connues = {f["person"]["id"] for liste in self.visages.values() for f in liste if f.get("person")}
+            cibles = [f for liste in self.visages.values() for f in liste if f["id"] == visage]
+            if personne not in connues or not cibles or personne in self.personnes_refusees:
+                return httpx.Response(400, json={"message": "Bad Request"})
+            for f in cibles:
+                f["person"] = {"id": personne, "name": ""}
             return httpx.Response(200, json={})
         if chemin == "/assets" and m == "POST":
             return self._envoi(r)

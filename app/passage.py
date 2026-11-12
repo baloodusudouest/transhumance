@@ -17,7 +17,7 @@ import httpx
 
 from .base import Base, maintenant
 from .config import Config
-from .immich import ErreurImmich, Immich, empreinte
+from .immich import LectureSeule, ErreurImmich, Immich, empreinte
 
 log = logging.getLogger("transhumance")
 FILES = ("metadataExtraction", "sidecar", "thumbnailGeneration", "faceDetection", "facialRecognition",
@@ -379,8 +379,14 @@ class Transhumance:
                 if (n.get("person") or {}).get("id") == v["personne"]:
                     issue["seul"] += 1
                 else:
-                    im.reaffecter_visage(n["id"], v["personne"])
-                    issue["reaffecte"] += 1
+                    try:
+                        im.reaffecter_visage(n["id"], v["personne"])
+                        issue["reaffecte"] += 1
+                    except LectureSeule:
+                        raise
+                    except ErreurImmich as exc:              # 0.1.6 : un refus ne coupe plus le lot, la photo part en écart
+                        log.warning("Visage non rattaché sur %s : %s", nouveau, exc)
+                        issue["perdu"] += 1
             else:
                 try:
                     im.creer_visage(nouveau, v["personne"], v)

@@ -143,6 +143,20 @@ def test_decocher_un_parent_rend_le_choix_d_avant(monde):
     assert t.a_migrer() == []
 
 
+def test_un_rattachement_refuse_ne_coupe_pas_le_lot(monde):
+    """0.1.6 : Immich refuse de rattacher un visage → la photo part en écart, les autres passent, on peut relancer."""
+    t, im, ids, photos = monde
+    im.personnes_refusees.add("pers-b")
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    assert t.tache["erreur"] is None                                   # le lot va au bout
+    e = etats(t)
+    assert e["IMG_0001.jpg"] == "ecart" and e["IMG_0002.jpg"] == e["IMG_0003.jpg"] == "prete"
+    b = t.bilan("Pellicule/2020")
+    assert b["visages"]["perdu"] == 1 and not b["supprimable"]         # rien n'est supprimable tant que l'écart est là
+    assert any(m == "PUT" and c == "/faces/pers-b" for m, c in im.ecrits)   # l'adresse porte la personne, comme dans Immich
+
+
 def test_le_passage_garde_personnes_albums_tags_dates(monde):
     t, im, ids, photos = monde
     t.regler_dossier("Pellicule/2020", coche=True)
