@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.1.1 — 12 novembre 2026
+- Icône de l'appli : une montagne et le chemin du troupeau.
+- `pc/immich-ml.yml` : la reconnaissance d'Immich sur le PC pendant la migration.
+
 ## 0.1.0 — 12 novembre 2026
 Première version, **jamais essayée sur un vrai Immich** : elle sert d'abord à l'essai sur un petit dossier.
 - Arborescence de la bibliothèque externe, cases à cocher, nom d'album proposé et modifiable par dossier.
