@@ -1,0 +1,45 @@
+# =============================================================================
+# Immich — reconnaissance sur le PC (Docker Desktop), pendant la migration
+#
+#   Immich (sur le NAS) envoie au PC la détection des visages, la recherche intelligente et la
+#   lecture de texte. Les vignettes, les vidéos et le rangement des fichiers restent sur le NAS.
+#   Comme le calculateur de Millésime, il utilise le processeur du PC : rien à installer d'autre.
+#
+#   Une seule fois, dans un dossier du PC (par exemple C:\immich-ml) :
+#       docker compose -f immich-ml.yml up -d
+#   Puis dans Immich : Administration › Paramètres › Apprentissage automatique › « Ajouter une URL »
+#       http://<adresse du PC>:3003      et la glisser AU-DESSUS de l'adresse déjà présente.
+#   Immich essaie les adresses dans l'ordre : PC éteint, il retombe tout seul sur le NAS.
+#
+#   À savoir :
+#   - la version doit être celle du serveur Immich (même valeur que IMMICH_VERSION sur le NAS) ;
+#   - ce service n'a aucune protection : ne l'ouvrir qu'au réseau local (pare-feu de Windows :
+#     autoriser le port 3003 pour le réseau privé seulement) ;
+#   - carte graphique NVIDIA : ajouter « -cuda » à la fin du nom de l'image et décommenter le bloc
+#     « deploy » ; sans cela le processeur fait le travail.
+#   Arrêter :  docker compose -f immich-ml.yml down     (puis retirer l'adresse dans Immich)
+# =============================================================================
+
+name: immich_ml_pc
+
+services:
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v3}
+    container_name: immich_ml_pc
+    environment:
+      - TZ=Europe/Paris
+    ports:
+      - "3003:3003"
+    volumes:
+      - model-cache:/cache                 # modèles téléchargés une fois
+    restart: unless-stopped                # relancé à chaque ouverture de Docker Desktop
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  model-cache:
