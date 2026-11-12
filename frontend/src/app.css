@@ -1,0 +1,128 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Thème de Transhumance : format commun (neutres chauds, sombre par défaut, clair si l'appareil
+   le demande). Couleur de l'appli : vert mousse.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* « dark: » s'applique partout sauf quand l'appareil demande le clair */
+@custom-variant dark {
+  @media not (prefers-color-scheme: light) {
+    @slot;
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --app: #8fae6b;                         /* vert mousse (sombre) */
+  --app-contraste: #131a0c;               /* texte posé sur la couleur de l'appli */
+
+  --radius: 0.75rem;
+  --background: #151311;
+  --foreground: #f2ece2;
+  --card: #1f1c19;
+  --card-foreground: var(--foreground);
+  --popover: #25211d;
+  --popover-foreground: var(--foreground);
+  --primary: var(--app);
+  --primary-foreground: var(--app-contraste);
+  --secondary: #2a2521;
+  --secondary-foreground: var(--foreground);
+  --muted: #2a2521;
+  --muted-foreground: #a89e91;
+  --accent: #2a2521;
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.72 0.18 22);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.16);
+  --ring: var(--app);
+  --valide: oklch(0.78 0.14 155);
+  --chart-1: var(--app);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --app: #4e6b2f;
+    --app-contraste: #fbfdf7;
+
+    --background: #faf7f2;
+    --foreground: #1e1a16;
+    --card: #f1ece3;
+    --popover: #fffdf9;
+    --secondary: #ebe5da;
+    --muted: #ebe5da;
+    --muted-foreground: #6f665b;
+    --accent: #ebe5da;
+    --destructive: oklch(0.55 0.2 25);
+    --border: oklch(0 0 0 / 0.1);
+    --input: oklch(0 0 0 / 0.16);
+    --valide: oklch(0.5 0.13 155);
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-valide: var(--valide);
+  --color-chart-1: var(--chart-1);
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  button { cursor: pointer; }
+  /* Animation sobre : rien ne bouge si l'appareil demande de réduire les animations */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
+}
+
+@layer components {
+  /* Titre d'écran : grand, fin, serré. C'est la signature typographique du socle. */
+  .titre { font-size: 2rem; line-height: 1.1; font-weight: 300; letter-spacing: -0.035em; }
+  .etiquette { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted-foreground); }
+  /* Signature : le numéro du livre, grand et fin, comme sur la tranche d'un classeur */
+  .tranche { font-size: 2.6rem; font-weight: 200; letter-spacing: -0.05em; line-height: 0.9; font-variant-numeric: tabular-nums; color: var(--app); }
+  .chiffre { font-weight: 300; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+}
+
+/* iPhone : tout ce qui se touche fait au moins 44 px de haut */
+@media (max-width: 899px) {
+  main button, main a[download] { min-height: 2.75rem; }
+}

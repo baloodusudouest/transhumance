@@ -1,0 +1,24 @@
+# Service à ajouter à la stack (Portainer). Outil d'une seule fois : à retirer quand la migration est finie.
+services:
+  transhumance:
+    image: ghcr.io/baloodusudouest/transhumance:latest
+    container_name: transhumance
+    depends_on:
+      - immich-server
+    environment:
+      - TZ=${TZ}
+      - TRANSHUMANCE_PASSWORD=${CARNET_PASSWORD}                  # mot de passe commun des applis : obligatoire
+      - TRANSHUMANCE_IMMICH_URL=http://immich_server:2283
+      - TRANSHUMANCE_IMMICH_CLE=${TRANSHUMANCE_IMMICH_CLE}        # clé d'API Immich dédiée : obligatoire
+      - TRANSHUMANCE_RACINE_IMMICH=/synologyphotos                # le dossier des photos tel qu'Immich le voit
+      - TRANSHUMANCE_IMMICH_ADRESSE=${TRANSHUMANCE_IMMICH_ADRESSE:-}   # adresse d'Immich dans le navigateur (liens du bilan)
+      - TRANSHUMANCE_EXCLUS=${TRANSHUMANCE_EXCLUS:-}              # dossiers de premier niveau jamais migrés, séparés par |
+      - TRANSHUMANCE_LECTURE_SEULE=${TRANSHUMANCE_LECTURE_SEULE:-}     # « oui » : n'envoie rien, ne supprime rien
+    ports:
+      - "${PORT_TRANSHUMANCE:-8097}:8097"
+    volumes:
+      - ${PHOTOS_ROOT}:/photos                                    # en écriture : nécessaire pour supprimer les originaux
+      - ${DOCKER_ROOT}/transhumance:/data                         # mémoire de l'outil, correspondance.csv, instantanes.jsonl
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"             # supprime des originaux : aucune mise à jour automatique
+    restart: unless-stopped
