@@ -48,6 +48,11 @@
     const s = new Set(ouverts); s.has(chemin) ? s.delete(chemin) : s.add(chemin); ouverts = s
   }
   const resume = (n) => Object.entries(n.etats).filter(([, v]) => v).map(([k, v]) => `${v} ${ETATS[k] || k}`).join(' · ')
+  // 0.1.7 : un dossier fini (tous ses originaux supprimés) quitte l'arbre ; un lien le remontre
+  let voirFinis = $state(false)
+  const nbFinis = $derived(a ? Object.values(a.noeuds).filter((n) => n.chemin !== '.' && range(n) && !range(a.noeuds[parent(n.chemin)] || {photos: 0, videos: 0, etats: {}})).length : 0)
+  const range = (n) => fini(n) && !n.inconnus      // un dossier où il reste des fichiers inconnus d'Immich reste visible
+  const parent = (c) => (c.includes('/') ? c.slice(0, c.lastIndexOf('/')) : '.')
   const fini = (n) => (n.photos + n.videos) > 0 && (n.etats.supprimee || 0) === n.photos + n.videos
   const avance = (n) => (n.photos + n.videos) ? ((n.etats.prete || 0) + (n.etats.supprimee || 0)) / (n.photos + n.videos) : 0
 
@@ -127,7 +132,9 @@
       {/if}
 
       <div class="mt-4 rounded-xl bg-secondary p-4">
-        {#if bilan.supprimable}
+        {#if bilan.termine}
+          <p class="text-sm" id="termine">Il n'y a plus rien à faire ici. Le dossier vide reste sur le NAS : tu peux l'effacer à la main quand tu veux.</p>
+        {:else if bilan.supprimable}
           <p class="text-sm"><strong class="font-semibold">Supprimer définitivement {bilan.a_supprimer} fichier(s) d'origine</strong> de ce dossier, et retirer les anciennes photos d'Immich.
             Les copies restent dans Immich. {bilan.inconnus ? `Les ${bilan.inconnus} fichier(s) qu'Immich ne connaît pas restent dans le dossier.` : ''} Il n'y a pas de corbeille : le seul retour est ta sauvegarde.</p>
           <label class="mt-2 flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" class="size-5 accent-[var(--app)]" bind:checked={confirme} />
@@ -145,12 +152,18 @@
   {/if}
 
   <section class="rounded-2xl border bg-card p-2 md:p-4" aria-label="Dossiers">
+    {#if nbFinis}
+      <p class="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" id="finis">
+        <span>{nbFinis} dossier(s) terminé(s){voirFinis ? '' : ', masqué(s)'} : photos dans Immich, originaux supprimés.</span>
+        <button type="button" class="underline underline-offset-2 hover:text-foreground" onclick={() => (voirFinis = !voirFinis)}>{voirFinis ? 'Masquer' : 'Afficher'}</button></p>
+    {/if}
     {#if a.noeuds['.']}{@render branche(a.noeuds['.'], 0)}
     {:else}<p class="p-3 text-sm text-muted-foreground">Aucun dossier : relis Immich et le dossier.</p>{/if}
   </section>
 {/if}
 
 {#snippet branche(n, niveau)}
+  {#if voirFinis || !range(n) || n.chemin === '.'}
   <div class="noeud" class:passe={fini(n)} style:--avance={avance(n)}>
     <div class="ligne" style:padding-left="{niveau * 1.1}rem">
       {#if n.enfants.length}
@@ -178,6 +191,7 @@
       {#each n.enfants as c (c)}{@render branche(a.noeuds[c], niveau + 1)}{/each}
     {/if}
   </div>
+  {/if}
 {/snippet}
 
 <style>

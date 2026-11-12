@@ -236,6 +236,12 @@ def test_supprimer_ne_supprime_que_ce_qui_est_prouve(monde):
     assert {f["person"]["id"] for f in im.visages[neufs[0]] if f.get("person")} <= {"pers-a", "pers-b"}
     with pytest.raises(Refus):                                         # une seconde fois : plus rien à faire
         t.supprimer("Pellicule/2020")
+    # 0.1.7 : le bilan dit que c'est fini, et le dossier ne reste pas coché
+    b = t.bilan("Pellicule/2020")
+    assert b["termine"] and b["supprimes"] == 3 and not b["supprimable"] and b["phrase"].startswith("Terminé")
+    assert "1 fichier(s) qu'Immich ne connaît pas" in b["phrase"]
+    t.arbre()
+    assert t.a_migrer() == []
 
 
 def test_une_copie_abimee_bloque_la_suppression(monde):

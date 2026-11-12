@@ -218,6 +218,9 @@ class Transhumance:
 
     def arbre(self) -> dict:
         """L'arborescence : un nœud par dossier, avec ses comptes (les siens et ceux de ses enfants)."""
+        # 0.1.7 : un dossier dont tous les originaux sont supprimés est fini, il ne reste pas coché
+        self.base.executer("UPDATE dossiers SET coche = 0 WHERE coche = 1 AND chemin IN "
+                           "(SELECT dossier FROM photos GROUP BY dossier HAVING SUM(etat != 'supprimee') = 0)")
         reglages = {l["chemin"]: l for l in self.base.tous("SELECT * FROM dossiers")}
         noeuds: dict[str, dict] = {}
 
@@ -523,14 +526,21 @@ class Transhumance:
                        if chemin in (".", "") or r["chemin"] == chemin or r["chemin"].startswith(chemin + "/"))
         en_attente = [l for l in visibles if l["etat"] == "ecart" and (not l["accepte"] or any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
         pretes = [l for l in visibles if l["etat"] == "prete" or (l["etat"] == "ecart" and l["accepte"] and not any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
+        supprimes = etats.get("supprimee", 0)
+        termine = bool(visibles) and supprimes == len(visibles)
         return {
+            "termine": termine, "supprimes": supprimes,
             "chemin": chemin, "fichiers": len(visibles), "etats": etats, "deja_la": deja, "visages": visages, "ecarts": ecarts,
             "inconnus": inconnus, "a_supprimer": len(pretes),
             "fichiers_inconnus": [l["rel"] for l in (self.base.tous("SELECT rel FROM inconnus ORDER BY rel LIMIT 300") if chemin in (".", "")
                                   else self.base.tous("SELECT rel FROM inconnus WHERE dossier = ? OR dossier LIKE ? ORDER BY rel LIMIT 300",
                                                       (chemin, chemin.replace("%", "") + "/%")))],
             "supprimable": bool(pretes) and not en_attente and not etats.get("vue") and not etats.get("envoyee"),
-            "phrase": f"{len(visibles)} fichiers dans ce dossier ; {len(pretes) + etats.get('supprimee', 0)} retrouvés identiques dans Immich ; "
+            "phrase": f"Terminé : les {supprimes} photos et vidéos de ce dossier sont dans le stockage d'Immich, et leurs originaux sont supprimés."
+                      + (f" {inconnus} fichier(s) qu'Immich ne connaît pas sont restés dans le dossier." if inconnus else "")
+                      if termine else
+                      f"{len(visibles)} fichiers dans ce dossier ; {len(pretes) + supprimes} retrouvés identiques dans Immich"
+                      + (f" (dont {supprimes} aux originaux déjà supprimés)" if supprimes else "") + " ; "
                       f"{len(en_attente)} avec un écart à régler ; "
                       + (f"{etats['envoyee']} envoyés, pas encore contrôlés ; " if etats.get("envoyee") else "")
                       + f"{etats.get('vue', 0)} pas encore envoyés ; "

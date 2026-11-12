@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 0.1.7 — 12 novembre 2026
+- **Après la suppression, le dossier est rangé.** Le bilan dit « Terminé » au lieu de « Pas encore supprimable ». Un dossier dont tous les originaux sont supprimés quitte l'arbre (un lien « Afficher » le remontre) et n'est plus compté dans « Faire passer les dossiers cochés ». Un dossier où il reste des fichiers inconnus d'Immich reste visible.
+
 ## 0.1.6 — 12 novembre 2026
 - **Correction** : « Immich a refusé le rattachement d'un visage (400) ». Transhumance inversait la personne et le visage dans la demande ; vérifié dans le code d'Immich. Le faux Immich des tests se comporte maintenant comme le vrai sur ce point.
 - Un visage qu'Immich refuse de rattacher ne coupe plus le lot : la photo part en écart, les autres continuent.

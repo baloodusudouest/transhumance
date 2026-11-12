@@ -110,6 +110,12 @@ def test_3_le_bilan_puis_le_clic(page, monde):
     assert (photos / "Pellicule/2019/2019-08-12 Vendanges/inconnu.jpg").is_file()        # l'inconnu d'Immich reste
     assert len(list((photos / "Pellicule/2020").rglob("IMG_*.jpg"))) == 3                # l'autre année n'a pas bougé
     assert "6 originaux supprimés" in ligne(page, "2019").inner_text()
+    # 0.1.7 : le bilan dit « Terminé » ; les sous-dossiers finis quittent l'arbre, un lien les remontre
+    assert page.locator("#phrase-bilan").inner_text().startswith("Terminé")
+    page.locator("#termine").wait_for()
+    assert not page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True).count()
+    page.locator("#finis").get_by_role("button", name="Afficher").click()
+    page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True).wait_for()
 
 
 def test_4_la_reconnaissance_dit_qui_travaille(page):
