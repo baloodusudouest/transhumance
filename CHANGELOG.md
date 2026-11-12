@@ -2,6 +2,7 @@
 
 ## 0.1.1 — 12 novembre 2026
 - Icône de l'appli : une montagne et le chemin du troupeau.
+- Inventaire : le parcours du dossier des photos ne s'arrête plus sur un dossier illisible et n'entre plus dans les dossiers techniques du NAS ; l'inventaire d'Immich est enregistré avant ce parcours.
 - `pc/immich-ml.yml` : la reconnaissance d'Immich sur le PC pendant la migration.
 
 ## 0.1.0 — 12 novembre 2026

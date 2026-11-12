@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 import re
 import time
 from pathlib import Path, PurePosixPath
@@ -84,19 +85,23 @@ class Transhumance:
             self.base.ecrire("bibliotheque", biblio["id"])
         finally:
             im.fermer()
-        # Fichiers du dossier qu'Immich ne connaît pas : comptés par dossier, jamais touchés
+        # L'inventaire d'Immich est acquis dès ici : le parcours du dossier, plus long, vient après
+        self.base.ecrire("inventaire", {"le": maintenant(), "photos": len(vues), "nouvelles": len(neuves), "inconnus": None})
+        # Fichiers du dossier qu'Immich ne connaît pas : comptés par dossier, jamais touchés.
+        # 0.1.1 : parcours tolérant (un dossier illisible est sauté) et qui n'entre pas dans les
+        # dossiers techniques du NAS (@eaDir contient plusieurs vignettes par photo).
         connus = {l["rel"] for l in self.base.tous("SELECT rel FROM photos")}
         inconnus: dict[str, int] = {}
-        if self.cfg.photos.is_dir():
-            for p in self.cfg.photos.rglob("*"):
-                if not p.is_file() or p.name.startswith(".") or any(x in p.parts for x in IGNORES):
+        racine = str(self.cfg.photos)
+        for dossier, sous, fichiers in os.walk(racine, onerror=lambda e: log.warning("Dossier illisible, sauté : %s", e.filename)):
+            sous[:] = [d for d in sous if d not in IGNORES and not d.startswith(".")]
+            rel_dossier = os.path.relpath(dossier, racine).replace(os.sep, "/")
+            for nom in fichiers:
+                if nom.startswith(".") or nom.lower().endswith(ACCOMPAGNEMENTS) or nom in ("Thumbs.db", "desktop.ini"):
                     continue
-                if p.suffix.lower() in ACCOMPAGNEMENTS:
-                    continue
-                rel = p.relative_to(self.cfg.photos).as_posix()
+                rel = nom if rel_dossier == "." else f"{rel_dossier}/{nom}"
                 if rel not in connus:
-                    d = str(PurePosixPath(rel).parent)
-                    inconnus[d] = inconnus.get(d, 0) + 1
+                    inconnus[rel_dossier] = inconnus.get(rel_dossier, 0) + 1
         self.base.executer("UPDATE dossiers SET inconnus = 0")
         for d, n in inconnus.items():
             self.base.executer("INSERT INTO dossiers(chemin, inconnus) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET inconnus = excluded.inconnus", (d, n))

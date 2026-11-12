@@ -69,7 +69,7 @@
       {/if}
     </div>
     <p class="mt-2 text-sm text-muted-foreground">
-      {a.inventaire ? `Dernière lecture le ${quand(a.inventaire.le)} : ${a.inventaire.photos} photos et vidéos dans la bibliothèque externe, ${a.inventaire.inconnus} fichier(s) qu'Immich ne connaît pas.` : 'Commence par relire Immich et le dossier.'}
+      {a.inventaire ? `Dernière lecture le ${quand(a.inventaire.le)} : ${a.inventaire.photos} photos et vidéos dans la bibliothèque externe, ${a.inventaire.inconnus ?? '(parcours du dossier non terminé)'} fichier(s) qu'Immich ne connaît pas.` : 'Commence par relire Immich et le dossier.'}
       Faire passer ne supprime rien.</p>
     {#if tache.en_cours}
       <p class="mt-2 text-sm" role="status" id="tache">{tache.message} {tache.total ? `(${tache.fait} / ${tache.total})` : ''}</p>
