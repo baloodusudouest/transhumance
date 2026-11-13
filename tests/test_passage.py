@@ -439,3 +439,31 @@ def test_parcours_par_l_api(client):
     c = client.get("/api/connexions").json()
     assert c["immich"]["version"] == "3.4.1" and c["dossier"]["inscriptible"] and c["dossier"]["exclus"] == ["Scans"]
     assert client.get("/api/bilan", params={"chemin": "../.."}).json()["fichiers"] == 0
+
+
+def test_030_demande_de_passage_par_une_autre_appli(client):
+    """Millésime signale un dossier daté : Transhumance le note et le montre, sans rien cocher ni lancer."""
+    import dataclasses
+    t, im, ids, photos = client.monde
+    racine = t.cfg.racine_immich
+    corps = {"dossier": f"{racine}/Pellicule/2020/2020-06-10", "de": "Millésime"}
+    assert client.post("/externe/demandes", json=corps).status_code == 401                      # pas de jeton réglé : fermé
+    t.cfg = main.ETAT["cfg"] = dataclasses.replace(t.cfg, jeton_millesime="jeton-m")
+    assert client.post("/externe/demandes", json=corps, headers={"Authorization": "Bearer autre"}).status_code == 401
+    h = {"Authorization": "Bearer jeton-m"}
+    avant = list(im.ecrits)
+    assert client.post("/externe/demandes", json=corps, headers=h).json() == {"ok": True, "dossier": "Pellicule/2020/2020-06-10"}
+    assert client.post("/externe/demandes", json={"dossier": "/ailleurs/Scans"}, headers=h).status_code == 404
+    assert client.post("/externe/demandes", json={"dossier": f"{racine}/Scans/Boîte 1"}, headers=h).status_code == 409   # jamais migré
+    assert client.post("/externe/demandes", json={"dossier": f"{racine}/Inconnu"}, headers=h).status_code == 404
+    assert client.post("/api/connexion", json={"mot_de_passe": t.cfg.password}).status_code == 200
+    noeud = client.get("/api/arbre").json()["noeuds"]["Pellicule/2020/2020-06-10"]
+    assert noeud["demande"]["de"] == "Millésime" and noeud["coche"] is False                    # montré, pas coché
+    assert im.ecrits == avant and not t.tache["en_cours"]                                       # rien n'est parti vers Immich
+    # La demande tombe quand le dossier est passé, ou quand on l'écarte à la main
+    arbre = client.post("/api/demande/oublier", json={"chemin": "Pellicule/2020/2020-06-10"}).json()
+    assert arbre["noeuds"]["Pellicule/2020/2020-06-10"]["demande"] is None
+    client.post("/externe/demandes", json=corps, headers=h)
+    t.regler_dossier("Pellicule/2020/2020-06-10", coche=True)
+    t.migrer()
+    assert t.arbre()["noeuds"]["Pellicule/2020/2020-06-10"]["demande"] is None

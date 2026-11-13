@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.3.0 — 13 novembre 2026
+- **Demande de passage par une autre appli.** Millésime peut signaler qu'un dossier est entièrement daté (`POST /externe/demandes`, jeton `TRANSHUMANCE_JETON_MILLESIME` ; sans jeton, l'adresse est fermée). Transhumance le note au journal et l'affiche dans l'arbre (« demandé par Millésime »). Il ne coche rien et ne lance rien : c'est toujours toi qui fais passer. La demande tombe d'elle-même quand le dossier n'a plus rien à envoyer.
+- Refusé : un dossier hors de la bibliothèque externe, inconnu de Transhumance, ou de ceux qui ne sont jamais migrés.
+- Tests : 24 du serveur.
+
 ## 0.2.1 — 13 novembre 2026
 - **« Lot interrompu : Immich a refusé le report d'un tag (500) ».** Un tag, une description ou une note qu'Immich refuse à l'envoi n'arrête plus le lot : l'envoi continue, et le contrôle reprend le report.
 - **Le contrôle répare ce qu'un lot coupé a laissé.** Avant de juger une copie, il lui remet ce qui manque : tags, description, note, favori, albums de l'ancienne photo. Une photo envoyée juste avant une interruption n'est donc plus déclarée « prête » sans ses tags.

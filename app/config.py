@@ -27,6 +27,7 @@ class Config:
     attente_files: float = 5.0        # secondes entre deux regards sur les files d'Immich
     delai_files: float = 3600.0       # attente maximale des files pour un dossier
     marge_place: float = 0.8          # part de la place libre qu'un lot peut occuper
+    jeton_millesime: str = ""         # 0.3.0 : jeton de Millésime pour /externe/demandes ; vide : adresse fermée
     extra: dict = field(default_factory=dict)
 
 
@@ -48,4 +49,5 @@ def charger() -> Config:
         exclus=tuple(x.strip() for x in e("TRANSHUMANCE_EXCLUS", "").split("|") if x.strip()),
         immich_adresse=e("TRANSHUMANCE_IMMICH_ADRESSE", "").rstrip("/"),
         lecture_seule=e("TRANSHUMANCE_LECTURE_SEULE", "").strip().lower() in VRAI,
+        jeton_millesime=e("TRANSHUMANCE_JETON_MILLESIME", "").strip(),
     )

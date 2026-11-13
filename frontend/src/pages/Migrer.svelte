@@ -198,7 +198,7 @@
              title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : n.souvenir ? `Décocher revient aux ${n.souvenir} sous-dossier(s) cochés avant` : ''}
              onchange={(e) => regler(n.chemin, { coche: n.selection === 'partiel' ? true : e.currentTarget.checked })} />
       <span class="min-w-0 flex-1">
-        <span class="block truncate font-medium">{n.nom}{#if n.exclu}&nbsp;<span class="font-normal text-muted-foreground">· jamais migré</span>{/if}</span>
+        <span class="block truncate font-medium">{n.nom}{#if n.exclu}&nbsp;<span class="font-normal text-muted-foreground">· jamais migré</span>{/if}{#if n.demande}&nbsp;<span class="demande" title={'Demandé le ' + quand(n.demande.le)}>demandé par {n.demande.de}</span>{/if}</span>
         <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {poids(n.poids)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}{n.selection === 'partiel' ? ` · ${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}{#if n.selection === 'partiel' && !tache.en_cours}&nbsp;· <button type="button" class="underline underline-offset-2 hover:text-foreground" aria-label={'Tout décocher dans ' + n.nom} onclick={() => regler(n.chemin, { coche: false, vider: true })}>tout décocher</button>{/if}</span>
       </span>
       {#if n.ici && !n.exclu}
@@ -215,6 +215,8 @@
 {/snippet}
 
 <style>
+  /* 0.3.0 : un dossier qu'une autre appli demande de faire passer */
+  .demande { font-weight: 500; font-size: 0.78rem; padding: 0.05rem 0.5rem; border-radius: 999px; border: 1px solid var(--app); color: var(--app); }
   .barre { height: 0.6rem; border-radius: 9999px; background: var(--border); overflow: hidden; }
   .rempli { height: 100%; border-radius: 9999px; background: var(--destructive, #c8553d); transition: width 0.4s ease; }
   /* Signature : un trait vert descend le long de ce qui est passé */

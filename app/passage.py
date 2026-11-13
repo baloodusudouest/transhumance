@@ -219,12 +219,42 @@ class Transhumance:
             return sorted(tous)
         return sorted(d for d in tous if d == chemin or d.startswith(chemin + "/")) or [chemin]
 
+    # ------------------------------------------------------------ demandes venues d'une autre appli (0.3.0)
+    def demander(self, chemin_immich: str, de: str) -> dict:
+        """Une autre appli (Millésime) signale qu'un dossier est prêt à passer. Transhumance le note et le montre :
+        il ne coche rien et ne lance rien. Le chemin est celui qu'Immich voit ; il doit être sous la bibliothèque externe."""
+        racine = self.cfg.racine_immich + "/"
+        chemin_immich = (chemin_immich or "").rstrip("/")
+        if not (chemin_immich + "/").startswith(racine):
+            raise Refus("Ce dossier n'est pas dans la bibliothèque externe que Transhumance fait passer.", 404)
+        chemin = chemin_immich[len(racine):]
+        if not self.base.un("SELECT 1 FROM photos WHERE dossier = ? LIMIT 1", (chemin,)):
+            raise Refus("Dossier inconnu de Transhumance : relis Immich et le dossier, puis redemande.", 404)
+        if self._exclu(chemin):
+            raise Refus("Ce dossier fait partie de ceux qui ne sont jamais migrés.", 409)
+        demandes = self.base.lire("demandes", {})
+        demandes[chemin] = {"de": str(de or "une autre appli")[:40], "le": maintenant()}
+        self.base.ecrire("demandes", demandes)
+        self.base.noter("Passage demandé", {"dossier": chemin, "de": demandes[chemin]["de"]})
+        return {"ok": True, "dossier": chemin}
+
+    def oublier_demande(self, chemin: str) -> None:
+        demandes = self.base.lire("demandes", {})
+        if demandes.pop(chemin, None) is not None:
+            self.base.ecrire("demandes", demandes)
+
     def arbre(self) -> dict:
         """L'arborescence : un nœud par dossier, avec ses comptes (les siens et ceux de ses enfants)."""
         # 0.1.7 : un dossier dont tous les originaux sont supprimés est fini, il ne reste pas coché
         self.base.executer("UPDATE dossiers SET coche = 0 WHERE coche = 1 AND chemin IN "
                            "(SELECT dossier FROM photos GROUP BY dossier HAVING SUM(etat != 'supprimee') = 0)")
         reglages = {l["chemin"]: l for l in self.base.tous("SELECT * FROM dossiers")}
+        # 0.3.0 : une demande tombe d'elle-même quand le dossier n'a plus rien à envoyer
+        demandes = self.base.lire("demandes", {})
+        restent = {l["dossier"] for l in self.base.tous("SELECT DISTINCT dossier FROM photos WHERE etat = 'vue'")}
+        if any(d not in restent for d in demandes):
+            demandes = {d: v for d, v in demandes.items() if d in restent}
+            self.base.ecrire("demandes", demandes)
         noeuds: dict[str, dict] = {}
 
         def noeud(chemin: str) -> dict:
@@ -234,7 +264,7 @@ class Transhumance:
                                   "photos": 0, "videos": 0, "poids": 0, "etats": {}, "ici": 0,
                                   "inconnus": r["inconnus"] if r else 0, "coche": bool(r and r["coche"]),
                                   "exclu": self._exclu(chemin), "propose": self.album_propose(chemin),
-                                  "album": self.album_de(chemin)}
+                                  "album": self.album_de(chemin), "demande": demandes.get(chemin)}
                 if chemin not in (".", ""):
                     parent = str(PurePosixPath(chemin).parent)
                     noeud(parent)["enfants"].append(chemin)

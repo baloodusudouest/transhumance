@@ -4,6 +4,7 @@ Routes : /health (publique), /api/session, /api/connexion, /api/deconnexion, pui
 le bilan, la suppression et le retour arrière."""
 from __future__ import annotations
 
+import hmac
 import asyncio
 import logging
 import os
@@ -43,13 +44,18 @@ def t() -> Transhumance:
 @app.middleware("http")
 async def garde(request: Request, appel):
     chemin = request.url.path
+    if chemin.startswith("/externe/"):
+        # 0.3.0 : une autre appli de la maison (Millésime) demande le passage d'un dossier, avec son jeton
+        jeton = ETAT["cfg"].jeton_millesime
+        if not jeton or not hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {jeton}"):
+            return JSONResponse({"detail": "Jeton manquant ou invalide."}, status_code=401)
     if chemin.startswith("/api/"):
         libre = chemin == "/api/session" or (chemin == "/api/connexion" and request.method == "POST")
         s = ETAT["sessions"]
         if not libre and not s.connecte(request.cookies):
             return JSONResponse({"detail": "Connexion nécessaire."}, status_code=401)
     reponse = await appel(request)
-    if chemin.startswith("/api/"):
+    if chemin.startswith(("/api/", "/externe/")):
         reponse.headers["Cache-Control"] = "no-store"
     return reponse
 
@@ -146,7 +152,21 @@ def connexions():
             "journal": [dict(l) for l in t().base.tous("SELECT le, quoi, detail FROM journal ORDER BY id DESC LIMIT 60")]}
 
 
+# ---------------------------------------------------------------- demandes des autres applis (jeton)
+
+@app.post("/externe/demandes")
+def demande(corps: dict = Body(...)):
+    """Millésime signale qu'un dossier est daté et prêt à passer. Rien n'est coché ni lancé."""
+    return t().demander(str(corps.get("dossier", "")), str(corps.get("de", "")))
+
+
 # ---------------------------------------------------------------- gestes
+
+@app.post("/api/demande/oublier")
+def oublier_demande(corps: dict = Body(...)):
+    t().oublier_demande(str(corps.get("chemin", "")))
+    return t().arbre()
+
 
 @app.post("/api/dossier")
 def regler_dossier(corps: dict = Body(...)):
