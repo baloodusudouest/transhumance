@@ -8,8 +8,9 @@
    ───────────────────────────────────────────────────────────────────────────── */
 
 /* « dark: » s'applique partout sauf quand l'appareil demande le clair */
+/* Toujours sombre : « dark: » s'applique partout (comme l'Anneau) */
 @custom-variant dark {
-  @media not (prefers-color-scheme: light) {
+  @media all {
     @slot;
   }
 }
@@ -42,26 +43,6 @@
   --chart-1: var(--app);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --app: #4e6b2f;
-    --app-contraste: #fbfdf7;
-
-    --background: #faf7f2;
-    --foreground: #1e1a16;
-    --card: #f1ece3;
-    --popover: #fffdf9;
-    --secondary: #ebe5da;
-    --muted: #ebe5da;
-    --muted-foreground: #6f665b;
-    --accent: #ebe5da;
-    --destructive: oklch(0.55 0.2 25);
-    --border: oklch(0 0 0 / 0.1);
-    --input: oklch(0 0 0 / 0.16);
-    --valide: oklch(0.5 0.13 155);
-  }
-}
 
 @theme inline {
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;

@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 0.3.1 — 13 novembre 2026
+- **Toujours sombre.** Le thème clair est retiré : l'appli est sombre partout, ouverte seule comme dans l'Anneau, quel que soit le réglage du téléphone.
+
 ## 0.3.0 — 13 novembre 2026
 - **Demande de passage par une autre appli.** Millésime peut signaler qu'un dossier est entièrement daté (`POST /externe/demandes`, jeton `TRANSHUMANCE_JETON_MILLESIME` ; sans jeton, l'adresse est fermée). Transhumance le note au journal et l'affiche dans l'arbre (« demandé par Millésime »). Il ne coche rien et ne lance rien : c'est toujours toi qui fais passer. La demande tombe d'elle-même quand le dossier n'a plus rien à envoyer.
 - Refusé : un dossier hors de la bibliothèque externe, inconnu de Transhumance, ou de ceux qui ne sont jamais migrés.
