@@ -14,7 +14,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import __version__
-from .auth import DUREE, Sessions
+from .auth import COMMUN, DUREE, Sessions
 from .base import Base
 from .config import APPLI, charger
 from .immich import ErreurImmich
@@ -46,7 +46,7 @@ async def garde(request: Request, appel):
     if chemin.startswith("/api/"):
         libre = chemin == "/api/session" or (chemin == "/api/connexion" and request.method == "POST")
         s = ETAT["sessions"]
-        if not libre and not s.valide(request.cookies.get(s.cookie)):
+        if not libre and not s.connecte(request.cookies):
             return JSONResponse({"detail": "Connexion nécessaire."}, status_code=401)
     reponse = await appel(request)
     if chemin.startswith("/api/"):
@@ -72,7 +72,7 @@ def sante():
 @app.get("/api/session")
 def session(request: Request):
     s = ETAT["sessions"]
-    return {"connecte": s.valide(request.cookies.get(s.cookie)), "version": __version__,
+    return {"connecte": s.connecte(request.cookies), "version": __version__,
             "lecture_seule": ETAT["cfg"].lecture_seule}
 
 
@@ -94,6 +94,7 @@ def deconnexion():
     s.generation += 1
     r = JSONResponse({"ok": True})
     r.delete_cookie(s.cookie)
+    r.delete_cookie(COMMUN)      # « Se déconnecter » ferme aussi la connexion commune
     return r
 
 

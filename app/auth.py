@@ -11,6 +11,7 @@ import hmac
 import time
 
 DUREE = 30 * 86400
+COMMUN = "maison_session"   # cookie commun aux applis de la maison, posé par l'Anneau
 
 
 class Sessions:
@@ -48,3 +49,24 @@ class Sessions:
         corps = f"{generation}.{expire}"
         return (hmac.compare_digest(signature, self._signature(corps)) and generation == str(self.generation)
                 and expire.isdigit() and int(expire) > time.time())
+
+    # ------------------------------------------------------------ connexion commune (posée par l'Anneau)
+    # L'Anneau pose à sa connexion un cookie « maison_session », signé avec le mot de passe commun.
+    # Le navigateur l'envoie à toutes les applis servies par la même adresse, quel que soit le port :
+    # une appli qui a le même mot de passe l'accepte, et s'ouvre sans rien demander. Il ne porte pas de
+    # génération : il vaut trente jours, ou jusqu'à ce que le mot de passe change.
+    def _signature_commune(self, corps: str) -> str:
+        return hmac.new(hashlib.sha256(b"maison-session|" + self._mdp).digest(), corps.encode(), hashlib.sha256).hexdigest()
+
+    def creer_commun(self) -> str:
+        expire = str(int(time.time()) + DUREE)
+        return f"{expire}.{self._signature_commune(expire)}"
+
+    def commun_valide(self, jeton: str | None) -> bool:
+        expire, _, signature = (jeton or "").partition(".")
+        return (expire.isdigit() and int(expire) > time.time()
+                and hmac.compare_digest(signature, self._signature_commune(expire)))
+
+    def connecte(self, cookies) -> bool:
+        """Connecté par le cookie de l'appli, ou par le cookie commun posé par l'Anneau."""
+        return self.valide(cookies.get(self.cookie)) or self.commun_valide(cookies.get(COMMUN))
