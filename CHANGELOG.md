@@ -1,5 +1,10 @@
 # Journal des versions
 
+
+## 0.4.0 — 14/11/2026
+
+- **Passage automatique des dossiers demandés par Millésime** (case dans « Migrer », coupée par défaut). Dès qu'un dossier est entièrement daté dans Millésime, sa demande arrive ici ; avec la case cochée, Transhumance le fait passer tout seul (envoi et contrôle, comme « Faire passer »), un dossier à la fois, quand aucun lot ne tourne (regard chaque minute). Les originaux ne sont jamais supprimés sans clic, après le bilan. Pas assez de place : la demande est marquée et reste à faire à la main.
+
 ## 0.3.1 — 13 novembre 2026
 - **Toujours sombre.** Le thème clair est retiré : l'appli est sombre partout, ouverte seule comme dans l'Anneau, quel que soit le réglage du téléphone.
 

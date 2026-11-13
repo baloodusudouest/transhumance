@@ -94,6 +94,14 @@
     {:else if tache.message}<p class="mt-2 text-sm" role="status" id="tache">{tache.message}</p>{/if}
     {#if ailleurs}<p class="mt-2 text-sm" role="status" id="suppression-en-cours">Suppression en cours dans « {ailleurs.dossier} » : {ailleurs.fait} sur {ailleurs.total}.</p>{/if}
     <Reconnaissance court {ondeconnecte} />
+    <!-- 0.4.0 : les dossiers que Millésime a fini de dater passent tout seuls (envoi et contrôle seulement) -->
+    <label class="auto mt-3">
+      <input type="checkbox" checked={a.auto_demandes} disabled={!!attente || lectureSeule}
+             onchange={(e) => faire('auto', async () => { a = await api.post('/api/auto-demandes', { oui: e.currentTarget.checked }) },
+                                    e.currentTarget.checked ? 'Les dossiers demandés par Millésime passeront tout seuls.' : 'Passage automatique coupé.')} />
+      <span><strong>Faire passer tout seuls les dossiers demandés par Millésime</strong>
+        <span class="block text-sm text-muted-foreground">Dès qu'un dossier est entièrement daté dans Millésime, il est envoyé et contrôlé ici, un à la fois, quand aucun lot ne tourne. Les originaux ne sont jamais supprimés sans ton clic, après le bilan.</span></span>
+    </label>
   </section>
   {#if message}<p class="mb-3 text-sm" role="status" id="message">{message}</p>{/if}
 
@@ -216,6 +224,8 @@
 
 <style>
   /* 0.3.0 : un dossier qu'une autre appli demande de faire passer */
+  .auto { display: flex; gap: 0.75rem; align-items: flex-start; cursor: pointer; }
+  .auto input { width: 1.25rem; height: 1.25rem; margin-top: 0.15rem; accent-color: var(--app); flex: none; }
   .demande { font-weight: 500; font-size: 0.78rem; padding: 0.05rem 0.5rem; border-radius: 999px; border: 1px solid var(--app); color: var(--app); }
   .barre { height: 0.6rem; border-radius: 9999px; background: var(--border); overflow: hidden; }
   .rempli { height: 100%; border-radius: 9999px; background: var(--destructive, #c8553d); transition: width 0.4s ease; }

@@ -238,6 +238,37 @@ class Transhumance:
         self.base.noter("Passage demandé", {"dossier": chemin, "de": demandes[chemin]["de"]})
         return {"ok": True, "dossier": chemin}
 
+    # ------------------------------------------------------------ 0.4.0 : passage automatique des demandes
+    def auto_demandes(self) -> bool:
+        return bool(self.base.lire("auto_demandes", False))
+
+    def regler_auto(self, oui: bool) -> None:
+        self.exiger_ecriture()
+        self.base.ecrire("auto_demandes", bool(oui))
+        self.base.noter("Passage automatique des demandes " + ("activé" if oui else "coupé"))
+
+    def passer_demande_suivante(self) -> str | None:
+        """Si le réglage est activé et qu'aucun lot ne tourne : fait passer la plus ancienne demande (envoi et
+        contrôle, comme « Migrer »). Les originaux ne sont jamais supprimés ici : cela reste un clic, après le bilan.
+        Rend le dossier passé, ou None. Une demande impossible (place) est marquée et n'est pas retentée."""
+        if not self.auto_demandes() or self.tache.get("en_cours") or self.cfg.lecture_seule:
+            return None
+        demandes = self.base.lire("demandes", {})
+        restent = {l["dossier"] for l in self.base.tous("SELECT DISTINCT dossier FROM photos WHERE etat IN ('vue', 'envoyee')")}
+        for chemin, d in sorted(demandes.items(), key=lambda x: x[1].get("le", "")):
+            if d.get("erreur") or chemin not in restent or self._exclu(chemin):
+                continue
+            place = self.verifier_place([chemin])
+            if not place["possible"]:
+                d["erreur"] = "Pas assez de place libre dans le stockage d'Immich : à faire passer à la main."
+                self.base.ecrire("demandes", demandes)
+                self.base.noter("Passage automatique impossible", {"dossier": chemin, "raison": "place"})
+                continue
+            self.base.noter("Passage automatique", {"dossier": chemin, "de": d.get("de")})
+            self.migrer([chemin])
+            return chemin
+        return None
+
     def oublier_demande(self, chemin: str) -> None:
         demandes = self.base.lire("demandes", {})
         if demandes.pop(chemin, None) is not None:
@@ -318,7 +349,8 @@ class Transhumance:
         for n in noeuds.values():
             n["enfants"].sort(key=str.casefold)
         return {"racine": ".", "noeuds": noeuds, "inventaire": self.base.lire("inventaire"),
-                "tache": self.tache, "lecture_seule": self.cfg.lecture_seule, "immich_adresse": self.cfg.immich_adresse}
+                "tache": self.tache, "lecture_seule": self.cfg.lecture_seule, "immich_adresse": self.cfg.immich_adresse,
+                "auto_demandes": self.auto_demandes()}
 
     # ================================================================ le passage
     def _fichier(self, rel: str) -> Path:
@@ -535,10 +567,11 @@ class Transhumance:
             im.fermer()
         return {"besoin": besoin, "libre": libre, "possible": besoin <= libre * self.cfg.marge_place}
 
-    def migrer(self) -> None:
-        """Fait passer les dossiers cochés. Rejouable : une photo déjà envoyée n'est pas renvoyée."""
+    def migrer(self, dossiers: list[str] | None = None) -> None:
+        """Fait passer les dossiers cochés (ou ceux donnés : passage automatique d'une demande). Rejouable : une
+        photo déjà envoyée n'est pas renvoyée."""
         self.exiger_ecriture()
-        dossiers = self.a_migrer()
+        dossiers = dossiers or self.a_migrer()
         if not dossiers:
             raise Refus("Aucun dossier coché.")
         place = self.verifier_place(dossiers)

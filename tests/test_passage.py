@@ -467,3 +467,22 @@ def test_030_demande_de_passage_par_une_autre_appli(client):
     t.regler_dossier("Pellicule/2020/2020-06-10", coche=True)
     t.migrer()
     assert t.arbre()["noeuds"]["Pellicule/2020/2020-06-10"]["demande"] is None
+
+
+def test_040_passage_automatique_des_demandes(client):
+    """0.4.0 : réglage activé, une demande de Millésime passe toute seule (envoi et contrôle), sans rien supprimer."""
+    import dataclasses
+    t, im, ids, photos = client.monde
+    t.cfg = main.ETAT["cfg"] = dataclasses.replace(t.cfg, jeton_millesime="jeton-m")
+    h = {"Authorization": "Bearer jeton-m"}
+    corps = {"dossier": f"{t.cfg.racine_immich}/Pellicule/2020/2020-06-10", "de": "Millésime"}
+    client.post("/externe/demandes", json=corps, headers=h)
+    assert t.passer_demande_suivante() is None                                                 # coupé par défaut
+    assert client.post("/api/connexion", json={"mot_de_passe": t.cfg.password}).status_code == 200
+    assert client.post("/api/auto-demandes", json={"oui": True}).json()["auto_demandes"] is True
+    assert t.passer_demande_suivante() == "Pellicule/2020/2020-06-10"
+    etats = {l["etat"] for l in t.base.tous("SELECT etat FROM photos WHERE dossier = ?", ("Pellicule/2020/2020-06-10",))}
+    assert "vue" not in etats and "supprimee" not in etats                                      # passé, originaux gardés
+    assert t.arbre()["noeuds"]["Pellicule/2020/2020-06-10"]["demande"] is None
+    assert t.passer_demande_suivante() is None                                                 # plus rien à faire
+    assert client.post("/api/auto-demandes", json={"oui": False}).json()["auto_demandes"] is False

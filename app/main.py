@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -23,6 +24,7 @@ from .passage import Refus, Transhumance
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 ETAT: dict = {}
+log = logging.getLogger("transhumance")
 
 
 @asynccontextmanager
@@ -31,7 +33,19 @@ async def cycle(app: FastAPI):
     ETAT.setdefault("cfg", cfg)
     ETAT.setdefault("t", Transhumance(cfg, Base(cfg.data / "transhumance.db"), ETAT.get("transport")))
     ETAT.setdefault("sessions", Sessions(APPLI, cfg.password))
+    # 0.4.0 : le passage automatique des dossiers demandés par Millésime (s'il est activé dans l'appli)
+    if ETAT.get("boucle_auto", True):
+        threading.Thread(target=_boucle_auto, daemon=True, name="auto").start()
     yield
+
+
+def _boucle_auto() -> None:
+    while True:
+        time.sleep(60)
+        try:
+            ETAT["t"].passer_demande_suivante()
+        except Exception as exc:  # noqa: BLE001 — l'erreur est dans la tâche, montrée à l'écran
+            log.warning("Passage automatique interrompu : %s", exc)
 
 
 app = FastAPI(title=APPLI, version=__version__, lifespan=cycle, docs_url=None, redoc_url=None)
@@ -161,6 +175,13 @@ def demande(corps: dict = Body(...)):
 
 
 # ---------------------------------------------------------------- gestes
+
+@app.post("/api/auto-demandes")
+def auto_demandes(corps: dict = Body(...)):
+    """0.4.0 : faire passer tout seul les dossiers demandés par Millésime (envoi et contrôle ; jamais la suppression)."""
+    t().regler_auto(bool(corps.get("oui")))
+    return t().arbre()
+
 
 @app.post("/api/demande/oublier")
 def oublier_demande(corps: dict = Body(...)):
