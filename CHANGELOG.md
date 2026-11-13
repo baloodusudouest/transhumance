@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 0.2.1 — 13 novembre 2026
+- **« Lot interrompu : Immich a refusé le report d'un tag (500) ».** Un tag, une description ou une note qu'Immich refuse à l'envoi n'arrête plus le lot : l'envoi continue, et le contrôle reprend le report.
+- **Le contrôle répare ce qu'un lot coupé a laissé.** Avant de juger une copie, il lui remet ce qui manque : tags, description, note, favori, albums de l'ancienne photo. Une photo envoyée juste avant une interruption n'est donc plus déclarée « prête » sans ses tags.
+- Deux écarts nouveaux, non bloquants, quand Immich refuse encore au contrôle : « tag » et « description ». Tant qu'ils ne sont pas acceptés, le dossier n'est pas supprimable.
+- Tests : 23 du serveur.
+
 ## 0.2.0 — 13 novembre 2026
 - **Connexion commune.** Connecté à l'Anneau, on n'a plus à se connecter ici : l'appli accepte le cookie « maison_session » que l'Anneau pose, quand elle est servie par la même adresse que lui. Le cookie est signé avec le mot de passe commun : une appli qui a un autre mot de passe continue de demander le sien. Il vaut trente jours, ou jusqu'au changement du mot de passe ; « Se déconnecter » le retire du navigateur.
 

@@ -33,6 +33,8 @@ ECARTS = {
     "date": ("La date de la copie n'est pas celle de l'ancienne photo.", False),
     "visage": ("Des personnes nommées sur l'ancienne photo ne le sont pas sur la copie.", False),
     "album": ("La copie n'est pas dans tous les albums de l'ancienne photo.", False),
+    "tag": ("Un tag de l'ancienne photo n'a pas pu être reporté sur la copie : Immich le refuse.", False),
+    "description": ("La description ou la note de l'ancienne photo n'a pas pu être reportée sur la copie.", False),
 }
 
 
@@ -339,11 +341,16 @@ class Transhumance:
         im.reporter(l["ancien_id"], nouveau)
         if album_id:
             im.ajouter_album(album_id, [nouveau])
-        for t in inst["tags"]:
-            im.etiqueter(t["id"], [nouveau])
-        corrections = {k: v for k, v in (("description", inst["description"]), ("rating", inst["note"])) if v}
-        if corrections:
-            im.corriger(nouveau, corrections)
+        # 0.2.1 : un tag ou une description qu'Immich refuse n'arrête plus le lot. Le contrôle les reprend
+        # (Immich a alors fini de lire la photo), et en fait un écart s'il refuse encore.
+        try:
+            for t in inst["tags"]:
+                im.etiqueter(t["id"], [nouveau])
+            corrections = {k: v for k, v in (("description", inst["description"]), ("rating", inst["note"])) if v}
+            if corrections:
+                im.corriger(nouveau, corrections)
+        except ErreurImmich as exc:
+            self.base.noter("Report à reprendre au contrôle", {"nouveau": nouveau, "raison": str(exc)})
 
     def _etat(self, ancien: str, etat: str, ecarts: list[str] | None = None) -> None:
         self.base.executer("UPDATE photos SET etat = ?, ecarts = ?, le = ? WHERE ancien_id = ?",
@@ -431,11 +438,49 @@ class Transhumance:
                 if not attendues <= presentes:
                     ecarts.append("visage")
             voulus = {a["id"] for a in inst["albums"]}
-            if voulus and not voulus <= {a["id"] for a in im.albums_de(l["nouveau_id"])}:
-                ecarts.append("album")
+            manquants = voulus - {a["id"] for a in im.albums_de(l["nouveau_id"])} if voulus else set()
+            if manquants:
+                # 0.2.1 : un lot interrompu a pu laisser la copie hors d'un album ; on l'y remet avant de juger
+                try:
+                    for album in manquants:
+                        im.ajouter_album(album, [l["nouveau_id"]])
+                except ErreurImmich:
+                    pass
+                if not voulus <= {a["id"] for a in im.albums_de(l["nouveau_id"])}:
+                    ecarts.append("album")
+            ecarts += self._finir_reports(im, inst, l["nouveau_id"], copie)
             inst["chemin_final"] = copie.get("originalPath")
             self.base.executer("UPDATE photos SET instantane = ? WHERE ancien_id = ?", (json.dumps(inst, ensure_ascii=False), l["ancien_id"]))
         self._etat(l["ancien_id"], "ecart" if ecarts else "prete", ecarts)
+
+    def _finir_reports(self, im: Immich, inst: dict, nouveau: str, copie: dict) -> list[str]:
+        """Tags, description, note et favori : ce qui manque à la copie est reporté maintenant (un lot interrompu,
+        ou un refus d'Immich à l'envoi, a pu en laisser). Rend les écarts qui restent."""
+        ecarts = []
+        portes = {t["id"] for t in copie.get("tags") or []}
+        for t in inst.get("tags") or []:
+            if t["id"] not in portes:
+                try:
+                    im.etiqueter(t["id"], [nouveau])
+                except ErreurImmich as exc:
+                    self.base.noter("Tag refusé par Immich", {"nouveau": nouveau, "tag": t.get("nom"), "raison": str(exc)})
+                    ecarts.append("tag")
+                    break
+        exif = copie.get("exifInfo") or {}
+        champs = {}
+        if inst.get("description") and (exif.get("description") or "") != inst["description"]:
+            champs["description"] = inst["description"]
+        if inst.get("note") and exif.get("rating") != inst["note"]:
+            champs["rating"] = inst["note"]
+        if inst.get("favori") and not copie.get("isFavorite"):
+            champs["isFavorite"] = True
+        if champs:
+            try:
+                im.corriger(nouveau, champs)
+            except ErreurImmich as exc:
+                self.base.noter("Description refusée par Immich", {"nouveau": nouveau, "raison": str(exc)})
+                ecarts.append("description")
+        return ecarts
 
     def _attendre_files(self, im: Immich) -> None:
         debut, calme = time.monotonic(), 0

@@ -4,6 +4,7 @@
 
 ## Où on en est (12/11/2026)
 
+- **0.2.1** (13/11/2026) : vu sur la vraie migration, « Immich a refusé le report d'un tag (500) » après 194 envois. Cause côté Immich non établie (erreur interne). `_envoyer` n'arrête plus le lot sur un tag ou une description ; `_finir_reports` (appelé par `_controler`) remet tags, description, note, favori, et le contrôle remet les albums manquants. Avant la 0.2.1, le contrôle ne vérifiait ni les tags ni la description : une photo envoyée juste avant une coupure pouvait passer « prête » sans eux.
 - **0.2.0** (13/11/2026) : connexion commune avec l'Anneau — cookie `maison_session` (accepté ; `Sessions.connecte`, `commun_valide` dans `app/auth.py`). Jamais essayée sur la vraie installation.
 - **0.1.0** : écrite et testée contre un **faux Immich** (`tests/faux_immich.py`), qui se comporte comme on
   suppose qu'Immich se comporte. **Jamais lancée sur le vrai.** Prochaine étape : l'essai sur un petit dossier.

@@ -31,6 +31,7 @@ class FauxImmich:
         self.libre = 10 ** 12
         self.n = 0
         self.abimer: set[str] = set()
+        self.tags_refuses = 0                       # nombre de reports de tag qu'Immich refuse (500) avant d'accepter
         self.personnes_refusees: set[str] = set()   # personnes dont Immich refuse le rattachement
         self.reconnaissance: dict | None = {"enabled": True, "urls": ["http://pc-invente:3003", "http://immich-machine-learning:3003"]}          # noms de fichiers dont la copie sera abîmée au rangement
 
@@ -132,6 +133,8 @@ class FauxImmich:
                 for k in ("dateTimeOriginal", "description", "rating", "latitude", "longitude"):
                     if k in c:
                         p["exifInfo"][k] = c[k]
+                if "isFavorite" in c:
+                    p["isFavorite"] = c["isFavorite"]
                 return httpx.Response(200, json=p)
             return httpx.Response(200, json=p)
         if chemin == "/albums" and m == "GET":
@@ -145,7 +148,13 @@ class FauxImmich:
             self.albums[mm.group(1)]["ids"].update(self._json(r)["ids"])
             return httpx.Response(200, json=[])
         if (mm := re.fullmatch(r"/tags/([^/]+)/assets", chemin)):
+            if self.tags_refuses:                      # Immich répond parfois 500 à un tag, puis l'accepte
+                self.tags_refuses -= 1
+                return httpx.Response(500, json={"message": "Internal server error"})
             self.tags.setdefault(mm.group(1), set()).update(self._json(r)["ids"])
+            for ident in self._json(r)["ids"]:         # comme dans Immich : la photo relue porte ses tags
+                if ident in self.photos and not any(t["id"] == mm.group(1) for t in self.photos[ident]["tags"]):
+                    self.photos[ident]["tags"].append({"id": mm.group(1), "value": mm.group(1)})
             return httpx.Response(200, json=[])
         return httpx.Response(404)
 

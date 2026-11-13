@@ -157,6 +157,51 @@ def test_un_rattachement_refuse_ne_coupe_pas_le_lot(monde):
     assert any(m == "PUT" and c == "/faces/pers-b" for m, c in im.ecrits)   # l'adresse porte la personne, comme dans Immich
 
 
+def test_un_tag_refuse_n_arrete_pas_le_lot(monde):
+    """0.2.1 : Immich répond parfois 500 au report d'un tag. Le lot continue, le contrôle reprend le tag."""
+    t, im, ids, photos = monde
+    im.tags_refuses = 1
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    assert t.tache["erreur"] is None
+    neuf = {l["rel"].rsplit("/", 1)[-1]: l["nouveau_id"] for l in t.base.tous("SELECT rel, nouveau_id FROM photos")}
+    assert neuf["IMG_0001.jpg"] in im.tags["tag-1"]                      # repris au contrôle
+    assert im.photos[neuf["IMG_0002.jpg"]]["exifInfo"]["description"] == "Sous le tilleul"
+    assert etats(t)["IMG_0001.jpg"] == "prete" and t.bilan("Pellicule/2020")["ecarts"] == []
+
+
+def test_un_tag_toujours_refuse_devient_un_ecart(monde):
+    t, im, ids, photos = monde
+    im.tags_refuses = 99
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    assert t.tache["erreur"] is None                                     # le lot va au bout
+    e = etats(t)
+    assert e["IMG_0001.jpg"] == "ecart" and e["IMG_0002.jpg"] == "prete"
+    b = t.bilan("Pellicule/2020")
+    assert [x["sorte"] for x in b["ecarts"]] == ["tag"] and not b["ecarts"][0]["bloquant"] and not b["supprimable"]
+    assert all((photos / l["rel"]).is_file() for l in t.base.tous("SELECT rel FROM photos"))
+
+
+def test_un_lot_interrompu_est_repare_au_controle(monde):
+    """Une photo envoyée dont les reports n'ont pas été faits (lot coupé) les retrouve au passage suivant."""
+    t, im, ids, photos = monde
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    neuf = {l["rel"].rsplit("/", 1)[-1]: l["nouveau_id"] for l in t.base.tous("SELECT rel, nouveau_id FROM photos")}
+    n1, n2 = neuf["IMG_0001.jpg"], neuf["IMG_0002.jpg"]
+    # On défait ce qu'un lot coupé n'aurait pas eu le temps de faire, et on remet les photos « envoyées »
+    im.tags["tag-1"].discard(n1); im.photos[n1]["tags"] = []
+    im.photos[n2]["exifInfo"]["description"] = ""
+    im.albums["alb-vieux"]["ids"].discard(n1)
+    t.base.executer("UPDATE photos SET etat = 'envoyee' WHERE nouveau_id IN (?, ?)", (n1, n2))
+    t.migrer()
+    assert t.tache["erreur"] is None
+    assert n1 in im.tags["tag-1"] and n1 in im.albums["alb-vieux"]["ids"]
+    assert im.photos[n2]["exifInfo"]["description"] == "Sous le tilleul"
+    assert etats(t)["IMG_0001.jpg"] == etats(t)["IMG_0002.jpg"] == "prete"
+
+
 def test_le_passage_garde_personnes_albums_tags_dates(monde):
     t, im, ids, photos = monde
     t.regler_dossier("Pellicule/2020", coche=True)
