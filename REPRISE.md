@@ -2,8 +2,9 @@
 
 À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`.
 
-## Où on en est (12/11/2026)
+## Où on en est (15/11/2026)
 
+- **0.5.0** (15/11/2026) : format commun — pilule en bas sur iPhone, rail sur PC, page `Reglages.svelte` (écriture, exclus, journal, version, déconnexion) ; `Services.svelte` ne garde que les services. Écart retiré du § 7 de `socle/docs/format.md`.
 - **0.3.1** (13/11/2026) : toujours sombre (blocs `prefers-color-scheme: light` retirés, variante `dark:` partout).
 - **0.3.0** (13/11/2026) : `/externe/demandes` (jeton de Millésime), `Transhumance.demander`, `demande` sur les nœuds de l'arbre, pastille dans `Migrer.svelte`. Jamais essayé sur la vraie installation.
 - **0.2.1** (13/11/2026) : vu sur la vraie migration, « Immich a refusé le report d'un tag (500) » après 194 envois. Cause côté Immich non établie (erreur interne). `_envoyer` n'arrête plus le lot sur un tag ou une description ; `_finir_reports` (appelé par `_controler`) remet tags, description, note, favori, et le contrôle remet les albums manquants. Avant la 0.2.1, le contrôle ne vérifiait ni les tags ni la description : une photo envoyée juste avant une coupure pouvait passer « prête » sans eux.

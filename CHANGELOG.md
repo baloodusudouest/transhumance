@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.5.0 — 15/11/2026
+
+- **Format commun du socle.** Navigation : rail à gauche sur PC, pilule d'icônes flottante en bas sur iPhone (au lieu de la barre en haut).
+- Nouvelle entrée **Réglages** : l'écriture (lecture seule ou non), les dossiers jamais migrés, le journal, la version et la déconnexion. **Connexion** ne garde que les services (Immich, dossier des photos, reconnaissance).
+
 
 ## 0.4.0 — 14/11/2026
 

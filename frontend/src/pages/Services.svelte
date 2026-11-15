@@ -1,12 +1,12 @@
 <script>
-  // « Connexion » : Immich et le dossier des photos, puis le journal, la version, la déconnexion.
+  // « Connexion » : Immich, le dossier des photos et la reconnaissance. Journal, version, déconnexion : dans Réglages (0.5.0).
   import { onMount } from 'svelte'
   import { api } from '$lib/api.js'
-  import { poids, quand } from '$lib/format.js'
+  import { poids } from '$lib/format.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import Reconnaissance from '$lib/Reconnaissance.svelte'
 
-  let { deconnecter, ondeconnecte } = $props()
+  let { ondeconnecte } = $props()
   let d = $state(null)
   let message = $state('')
   async function lire() { try { d = await api.get('/api/connexions') } catch (e) { if (e.statut === 401) ondeconnecte?.(); else message = e.message } }
@@ -37,14 +37,4 @@
   </div>
   <div class="mt-3"><Button variant="outline" onclick={lire}>Vérifier</Button></div>
 
-  <section class="mt-4 rounded-2xl border bg-card p-5" aria-label="Journal">
-    <h2 class="text-lg font-semibold">Journal</h2>
-    <ul class="mt-2 divide-y text-sm">
-      {#each d.journal as l}
-        <li class="flex flex-wrap justify-between gap-x-4 py-1.5"><span>{l.quoi}</span><span class="text-muted-foreground">{quand(l.le)}</span></li>
-      {:else}<li class="py-1.5 text-muted-foreground">Rien pour l'instant.</li>{/each}
-    </ul>
-  </section>
-  <p class="mt-6 flex items-center justify-between gap-3 text-sm text-muted-foreground">
-    <span>Transhumance {d.version}</span><Button variant="outline" onclick={deconnecter}>Se déconnecter</Button></p>
 {/if}

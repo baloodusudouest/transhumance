@@ -126,3 +126,38 @@ def test_4_la_reconnaissance_dit_qui_travaille(page):
     texte = bloc.inner_text()
     assert "1. PC" in texte and "2. NAS" in texte and "Lecture du texte (OCR)" in texte
     assert "ne répond pas" in texte                                   # adresses inventées : personne ne répond
+
+
+def test_5_reglages_journal_version_deconnexion(page):
+    """0.5.0 (format commun) : Réglages porte l'écriture, le journal, la version et la déconnexion ; Connexion ne garde que les services."""
+    page.get_by_role("link", name="Réglages").click()
+    page.get_by_role("heading", level=1, name="Réglages").wait_for()
+    page.get_by_role("region", name="Journal").wait_for()
+    assert page.get_by_text(re.compile(r"^Transhumance \d+\.\d+\.\d+$")).count() == 1
+    assert page.get_by_role("button", name="Se déconnecter").count() == 1
+    page.get_by_role("link", name="Connexion").click()
+    page.get_by_role("region", name="Immich", exact=True).wait_for()
+    assert page.get_by_role("region", name="Journal").count() == 0 and page.get_by_role("button", name="Se déconnecter").count() == 0
+
+
+def test_6_sur_iphone_la_pilule_en_bas(page, monde):
+    if True:                                                                        # même navigateur, contexte d'iPhone
+        c = page.context.browser.new_context(viewport={"width": 390, "height": 664}, device_scale_factor=3, is_mobile=True, has_touch=True)
+        pg = c.new_page()
+        pg.set_default_timeout(10000)
+        erreurs = []
+        pg.on("pageerror", lambda e: erreurs.append(str(e)))
+        pg.goto(monde[0])
+        pg.get_by_label(re.compile("Mot de passe")).fill("essai-essai")
+        pg.get_by_role("button", name="Se connecter").click()
+        pg.get_by_role("heading", level=1, name="Migrer").wait_for()
+        nav = pg.get_by_role("navigation", name="Sections").bounding_box()
+        hauteur = pg.viewport_size["height"]
+        assert nav["y"] > hauteur * 0.8 and nav["height"] < 70                       # pilule flottante en bas
+        assert pg.get_by_role("navigation", name="Sections").get_by_role("link").count() == 3
+        for nom in ("Migrer", "Connexion", "Réglages"):
+            pg.get_by_role("link", name=nom).click()
+            pg.get_by_role("heading", level=1, name=nom).wait_for()
+            assert pg.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), nom   # rien ne déborde
+        assert not erreurs, erreurs
+        c.close()
