@@ -7,13 +7,20 @@ services:
       - immich-server
     environment:
       - TZ=${TZ}
-      - TRANSHUMANCE_PASSWORD=${CARNET_PASSWORD}                  # mot de passe commun des applis : obligatoire
+      # 0.6.0 : variables communes de la maison (module app/maison.py) ; les anciennes restent lues en repli
+      - MAISON_PASSWORD=${MAISON_PASSWORD:-}                      # mot de passe commun des applis (repli : TRANSHUMANCE_PASSWORD)
+      - TRANSHUMANCE_PASSWORD=${CARNET_PASSWORD}                  # repli : à retirer quand MAISON_PASSWORD est dans la stack
+      - MAISON_JETON=${MAISON_JETON:-}                            # jeton commun : ouvre /externe/demandes à Millésime ; lit l'annuaire de l'Anneau
+      - MAISON_JETON_ANCIEN=${MAISON_JETON_ANCIEN:-}              # accepté en plus pendant un changement de jeton ; vide sinon
+      - TRANSHUMANCE_JETON_MILLESIME=${TRANSHUMANCE_JETON_MILLESIME:-}   # repli : ancien jeton de Millésime, accepté tant qu'il est posé
+      - MAISON_LECTURE_SEULE=${MAISON_LECTURE_SEULE:-}            # « oui » : aucune appli n'écrit ; TRANSHUMANCE_LECTURE_SEULE l'emporte si posée
+      # - MAISON_ANNEAU_URL=http://anneau:8094                    # adresse de l'Anneau pour l'annuaire (valeur par défaut)
       - TRANSHUMANCE_IMMICH_URL=http://immich_server:2283
       - TRANSHUMANCE_IMMICH_CLE=${TRANSHUMANCE_IMMICH_CLE}        # clé d'API Immich dédiée : obligatoire
       - TRANSHUMANCE_RACINE_IMMICH=/synologyphotos                # le dossier des photos tel qu'Immich le voit
-      - TRANSHUMANCE_IMMICH_ADRESSE=${TRANSHUMANCE_IMMICH_ADRESSE:-}   # adresse d'Immich dans le navigateur (liens du bilan)
+      - TRANSHUMANCE_IMMICH_ADRESSE=${TRANSHUMANCE_IMMICH_ADRESSE:-}   # repli : l'adresse d'Immich vient de l'Anneau (tuile « Immich »)
       - TRANSHUMANCE_EXCLUS=${TRANSHUMANCE_EXCLUS:-}              # dossiers de premier niveau jamais migrés, séparés par |
-      - TRANSHUMANCE_LECTURE_SEULE=${TRANSHUMANCE_LECTURE_SEULE:-}     # « oui » : n'envoie rien, ne supprime rien
+      - TRANSHUMANCE_LECTURE_SEULE=${TRANSHUMANCE_LECTURE_SEULE:-}     # « oui » : n'envoie rien, ne supprime rien ; « non » : force l'écriture ici seulement
     ports:
       - "${PORT_TRANSHUMANCE:-8097}:8097"
     volumes:

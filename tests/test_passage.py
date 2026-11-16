@@ -14,6 +14,15 @@ from app.passage import Refus, Transhumance
 from .faux_immich import CLE, RACINE, FauxImmich
 
 MDP = "mot-de-passe-essai"
+MAISON = ("MAISON_PASSWORD", "MAISON_JETON", "MAISON_JETON_ANCIEN", "MAISON_LECTURE_SEULE", "MAISON_ANNEAU_URL",
+          "TRANSHUMANCE_PASSWORD", "TRANSHUMANCE_LECTURE_SEULE", "TRANSHUMANCE_JETON_MILLESIME", "TRANSHUMANCE_IMMICH_ADRESSE")
+
+
+@pytest.fixture(autouse=True)
+def sans_variables_de_la_maison(monkeypatch):
+    """0.6.0 : les variables communes posées sur la machine de test ne doivent ouvrir aucune porte."""
+    for nom in MAISON:
+        monkeypatch.delenv(nom, raising=False)
 
 
 def poser(dossier, rel, contenu=None):
@@ -486,3 +495,120 @@ def test_040_passage_automatique_des_demandes(client):
     assert t.arbre()["noeuds"]["Pellicule/2020/2020-06-10"]["demande"] is None
     assert t.passer_demande_suivante() is None                                                 # plus rien à faire
     assert client.post("/api/auto-demandes", json={"oui": False}).json()["auto_demandes"] is False
+
+
+# ---------------------------------------------------------------- 0.6.0 : variables communes de la maison
+
+def _charger(monkeypatch, **variables):
+    from app.config import charger
+    monkeypatch.setenv("TRANSHUMANCE_IMMICH_CLE", "cle-essai")
+    monkeypatch.setenv("TRANSHUMANCE_RACINE_IMMICH", "/racine-essai")
+    for nom, valeur in variables.items():
+        monkeypatch.setenv(nom, valeur)
+    return charger()
+
+
+def test_060_copie_du_module_commun_non_retouchee():
+    from app import maison
+    assert maison.CONTRAT == 1 and maison.empreinte_ecrite()
+    assert maison.empreinte_calculee() == maison.empreinte_ecrite()
+
+
+def test_060_mot_de_passe_commun_puis_repli(monkeypatch):
+    assert _charger(monkeypatch, TRANSHUMANCE_PASSWORD="ancien-mdp").password == "ancien-mdp"           # repli
+    assert _charger(monkeypatch, MAISON_PASSWORD="mdp-commun").password == "mdp-commun"               # commun d'abord
+    monkeypatch.delenv("MAISON_PASSWORD")
+    monkeypatch.delenv("TRANSHUMANCE_PASSWORD")
+    with pytest.raises(SystemExit, match=r"MAISON_PASSWORD \(ou TRANSHUMANCE_PASSWORD\)"):
+        _charger(monkeypatch)
+
+
+def test_060_lecture_seule_de_la_maison_et_forcage(monkeypatch):
+    cfg = _charger(monkeypatch, TRANSHUMANCE_PASSWORD="m")
+    assert not cfg.lecture_seule and cfg.lecture_seule_origine == ""
+    for valeur in ("oui", "1", "true", "yes"):                                     # valeurs acceptées avant la 0.6.0
+        monkeypatch.setenv("TRANSHUMANCE_LECTURE_SEULE", valeur)
+        cfg = _charger(monkeypatch)
+        assert cfg.lecture_seule and cfg.lecture_seule_origine == "appli", valeur
+    monkeypatch.delenv("TRANSHUMANCE_LECTURE_SEULE")
+    cfg = _charger(monkeypatch, MAISON_LECTURE_SEULE="oui")                        # toute la maison
+    assert cfg.lecture_seule and cfg.lecture_seule_origine == "maison"
+    cfg = _charger(monkeypatch, TRANSHUMANCE_LECTURE_SEULE="non")                   # forcé pour cette appli seule
+    assert not cfg.lecture_seule and cfg.lecture_seule_origine == ""
+    cfg = _charger(monkeypatch, MAISON_LECTURE_SEULE="non", TRANSHUMANCE_LECTURE_SEULE="oui")
+    assert cfg.lecture_seule and cfg.lecture_seule_origine == "appli"
+
+
+def test_060_lecture_seule_de_la_maison_n_envoie_rien_et_ne_supprime_rien(monde, monkeypatch):
+    """La lecture seule venue de MAISON_LECTURE_SEULE est refusée aux deux mêmes endroits que l'ancienne."""
+    import dataclasses
+    from app.immich import LectureSeule
+    t, im, ids, photos = monde
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    avant = list(im.ecrits)
+    lu = _charger(monkeypatch, TRANSHUMANCE_PASSWORD="m", MAISON_LECTURE_SEULE="oui")
+    t.cfg = dataclasses.replace(t.cfg, lecture_seule=lu.lecture_seule, lecture_seule_origine=lu.lecture_seule_origine)
+    for geste in (t.migrer, lambda: t.supprimer("Pellicule/2020"), lambda: t.defaire("Pellicule/2020")):
+        with pytest.raises(Refus, match="lecture seule"):
+            geste()
+    with pytest.raises(LectureSeule):
+        t.immich().retirer(["x"])
+    assert im.ecrits == avant and (photos / "Pellicule/2020/2020-06-10/IMG_0003.jpg").is_file()
+
+
+def test_060_session_dit_d_ou_vient_la_lecture_seule(client):
+    import dataclasses
+    t = client.monde[0]
+    t.cfg = main.ETAT["cfg"] = dataclasses.replace(t.cfg, lecture_seule=True, lecture_seule_origine="maison")
+    s = client.get("/api/session").json()
+    assert s["lecture_seule"] and s["lecture_seule_origine"] == "maison"
+
+
+def test_060_porte_de_millesime_ouverte_par_le_jeton_commun_et_par_l_ancien(client, monkeypatch):
+    import dataclasses
+    t, im, ids, photos = client.monde
+    corps = {"dossier": f"{t.cfg.racine_immich}/Pellicule/2020/2020-06-10", "de": "Millésime"}
+    porte = lambda jeton: client.post("/externe/demandes", json=corps,                       # noqa: E731
+                                      headers={"Authorization": f"Bearer {jeton}"} if jeton else {}).status_code
+    assert porte("") == 401 and porte("quelconque") == 401                                  # rien de posé : fermée
+    monkeypatch.setenv("MAISON_JETON", "jeton-commun")
+    assert porte("jeton-commun") == 200 and porte("autre") == 401 and porte("") == 401
+    assert client.post("/externe/demandes", json=corps, headers={"X-Maison-Jeton": "jeton-commun"}).status_code == 200
+    monkeypatch.setenv("MAISON_JETON_ANCIEN", "jeton-d-avant")                               # changement de jeton
+    assert porte("jeton-d-avant") == 200 and porte("jeton-commun") == 200
+    t.cfg = main.ETAT["cfg"] = dataclasses.replace(t.cfg, jeton_millesime="jeton-m")         # l'ancien jeton propre
+    assert porte("jeton-m") == 200 and porte("jeton-commun") == 200
+    monkeypatch.delenv("MAISON_JETON")
+    monkeypatch.delenv("MAISON_JETON_ANCIEN")
+    assert porte("jeton-m") == 200 and porte("jeton-commun") == 401
+
+
+def test_060_l_annuaire_lit_avec_le_jeton_commun(monkeypatch):
+    """Transhumance n'envoie de demande à aucune autre appli : son seul envoi de jeton est la lecture de l'annuaire."""
+    from app import maison
+    assert maison.Annuaire().jeton == ""
+    monkeypatch.setenv("MAISON_JETON", "jeton-commun")
+    assert maison.Annuaire().jeton == "jeton-commun"
+
+
+def test_060_adresse_d_immich_par_l_annuaire_puis_repli(client, monkeypatch):
+    import dataclasses
+    from app import maison
+    t = client.monde[0]
+    t.cfg = main.ETAT["cfg"] = dataclasses.replace(t.cfg, immich_adresse="http://repli.exemple")
+    assert client.post("/api/connexion", json={"mot_de_passe": MDP}).status_code == 200
+    tuiles = [{"nom": "Immich", "locale": "http://nas.exemple:2283/", "privee": "https://immich.exemple.ts.net"}]
+    monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton="j", lire=lambda: tuiles))
+    assert client.get("/api/arbre").json()["immich_adresse"] == "http://nas.exemple:2283"
+    assert client.get("/api/arbre", headers={"host": "nas.exemple.ts.net:8097"}).json()["immich_adresse"] == \
+        "https://immich.exemple.ts.net"
+    assert client.post("/api/dossier", json={"chemin": "Pense bete", "coche": True}).json()["immich_adresse"] == \
+        "http://nas.exemple:2283"
+
+    def injoignable():
+        raise OSError("pas d'Anneau")
+    monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton="j", lire=injoignable))
+    assert client.get("/api/arbre").json()["immich_adresse"] == "http://repli.exemple"
+    monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton=""))                        # sans jeton : pas d'appel
+    assert client.get("/api/arbre").json()["immich_adresse"] == "http://repli.exemple"

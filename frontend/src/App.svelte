@@ -18,7 +18,7 @@
     { page: 'reglages', nom: 'Réglages', icone: SlidersHorizontal },
   ]
   let connecte = $state(null)
-  let session = $state({ version: '', lecture_seule: false })
+  let session = $state({ version: '', lecture_seule: false, lecture_seule_origine: '' })
   let page = $state(lirePage())
   function lirePage() {
     const p = location.hash.replace('#/', '')

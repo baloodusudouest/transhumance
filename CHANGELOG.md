@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.6.0 — 16 novembre 2026
+
+- **Variables communes de la maison** (module `app/maison.py`, copié du socle sans retouche). Rien ne change tant que la stack n'a pas les nouvelles variables : chaque ancien nom reste lu en repli.
+- **Mot de passe** : `MAISON_PASSWORD`, sinon `TRANSHUMANCE_PASSWORD` comme avant.
+- **Lecture seule** : `MAISON_LECTURE_SEULE=oui` met toute la maison en lecture seule, Transhumance compris ; `TRANSHUMANCE_LECTURE_SEULE` (« oui » ou « non ») l'emporte pour cette appli. La garde reste posée deux fois (avant tout travail et au plus près d'Immich). Réglages dit d'où vient la lecture seule : toute la maison ou cette appli.
+- **Demandes de Millésime** (`/externe/demandes`) : acceptées avec l'ancien jeton `TRANSHUMANCE_JETON_MILLESIME` ou avec le jeton commun `MAISON_JETON` (et `MAISON_JETON_ANCIEN` pendant un changement). Aucun jeton posé : l'adresse reste fermée.
+- **Liens du bilan vers Immich** : l'adresse vient de l'Anneau (tuile « Immich », adresse Tailscale quand la page est ouverte par Tailscale) ; sinon `TRANSHUMANCE_IMMICH_ADRESSE` comme avant.
+- Tests : 33 du serveur, 6 d'écran.
+
 ## 0.5.0 — 15/11/2026
 
 - **Format commun du socle.** Navigation : rail à gauche sur PC, pilule d'icônes flottante en bas sur iPhone (au lieu de la barre en haut).

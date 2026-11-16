@@ -26,8 +26,9 @@ Tant que les originaux sont là, **Défaire** retire les copies et remet le doss
 
 ## Variables
 
-Voir `docker-compose.yml`. Sans `TRANSHUMANCE_PASSWORD`, `TRANSHUMANCE_IMMICH_CLE` et `TRANSHUMANCE_RACINE_IMMICH`,
-le conteneur ne démarre pas. Premier lancement conseillé avec `TRANSHUMANCE_LECTURE_SEULE=oui`.
+Voir `docker-compose.yml`. Sans mot de passe (`MAISON_PASSWORD`, ou `TRANSHUMANCE_PASSWORD` en repli), `TRANSHUMANCE_IMMICH_CLE`
+et `TRANSHUMANCE_RACINE_IMMICH`, le conteneur ne démarre pas. Premier lancement conseillé avec `TRANSHUMANCE_LECTURE_SEULE=oui`
+(ou `MAISON_LECTURE_SEULE=oui` pour toute la maison).
 
 ## Tests
 

@@ -4,7 +4,6 @@ Routes : /health (publique), /api/session, /api/connexion, /api/deconnexion, pui
 le bilan, la suppression et le retour arrière."""
 from __future__ import annotations
 
-import hmac
 import asyncio
 import logging
 import os
@@ -15,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__
+from . import __version__, maison
 from .auth import COMMUN, DUREE, Sessions
 from .base import Base
 from .config import APPLI, charger
@@ -59,9 +58,11 @@ def t() -> Transhumance:
 async def garde(request: Request, appel):
     chemin = request.url.path
     if chemin.startswith("/externe/"):
-        # 0.3.0 : une autre appli de la maison (Millésime) demande le passage d'un dossier, avec son jeton
-        jeton = ETAT["cfg"].jeton_millesime
-        if not jeton or not hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {jeton}"):
+        # 0.3.0 : une autre appli de la maison (Millésime) demande le passage d'un dossier, avec son jeton.
+        # 0.6.0 : son jeton propre (TRANSHUMANCE_JETON_MILLESIME) ou le jeton commun (MAISON_JETON, MAISON_JETON_ANCIEN),
+        # comparés en temps constant ; aucun jeton posé : adresse fermée.
+        acceptes = tuple(j for j in (ETAT["cfg"].jeton_millesime, *maison.jetons()) if j)
+        if not maison.jeton_valide(maison.jeton_propose(request.headers), acceptes):
             return JSONResponse({"detail": "Jeton manquant ou invalide."}, status_code=401)
     if chemin.startswith("/api/"):
         libre = chemin == "/api/session" or (chemin == "/api/connexion" and request.method == "POST")
@@ -84,6 +85,21 @@ async def _immich(_: Request, exc: ErreurImmich):
     return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
+ANNUAIRE = maison.Annuaire()
+
+
+def immich_adresse(request: Request) -> str:
+    """0.6.0 : adresse d'Immich pour le navigateur (liens du bilan), lue dans l'Anneau (tuile « Immich », privée si
+    la page vient de Tailscale) ; repli : TRANSHUMANCE_IMMICH_ADRESSE."""
+    return ANNUAIRE.adresse("Immich", prive=maison.est_prive(request.headers.get("host", "")),
+                            repli=ETAT["cfg"].immich_adresse)
+
+
+def arbre_vu(request: Request) -> dict:
+    """L'arbre, avec l'adresse d'Immich vue par ce navigateur."""
+    return {**t().arbre(), "immich_adresse": immich_adresse(request)}
+
+
 @app.get("/health")
 def sante():
     return {"ok": True, "version": __version__}
@@ -93,7 +109,7 @@ def sante():
 def session(request: Request):
     s = ETAT["sessions"]
     return {"connecte": s.connecte(request.cookies), "version": __version__,
-            "lecture_seule": ETAT["cfg"].lecture_seule}
+            "lecture_seule": ETAT["cfg"].lecture_seule, "lecture_seule_origine": ETAT["cfg"].lecture_seule_origine}
 
 
 @app.post("/api/connexion")
@@ -121,15 +137,15 @@ def deconnexion():
 # ---------------------------------------------------------------- lecture
 
 @app.get("/api/arbre")
-def arbre():
-    return t().arbre()
+def arbre(request: Request):
+    return arbre_vu(request)
 
 
 @app.post("/api/inventaire")
-def inventaire():
+def inventaire(request: Request):
     """Relit Immich et le dossier des photos. N'écrit rien dans Immich ni dans le dossier."""
     t().inventaire()
-    return t().arbre()
+    return arbre_vu(request)
 
 
 @app.get("/api/bilan")
@@ -162,7 +178,7 @@ def connexions():
         inscriptible = False
     return {"immich": immich, "dossier": {"lisible": cfg.photos.is_dir(), "inscriptible": inscriptible,
                                           "exclus": list(cfg.exclus)},
-            "version": __version__, "lecture_seule": cfg.lecture_seule,
+            "version": __version__, "lecture_seule": cfg.lecture_seule, "lecture_seule_origine": cfg.lecture_seule_origine,
             "journal": [dict(l) for l in t().base.tous("SELECT le, quoi, detail FROM journal ORDER BY id DESC LIMIT 60")]}
 
 
@@ -177,25 +193,25 @@ def demande(corps: dict = Body(...)):
 # ---------------------------------------------------------------- gestes
 
 @app.post("/api/auto-demandes")
-def auto_demandes(corps: dict = Body(...)):
+def auto_demandes(request: Request, corps: dict = Body(...)):
     """0.4.0 : faire passer tout seul les dossiers demandés par Millésime (envoi et contrôle ; jamais la suppression)."""
     t().regler_auto(bool(corps.get("oui")))
-    return t().arbre()
+    return arbre_vu(request)
 
 
 @app.post("/api/demande/oublier")
-def oublier_demande(corps: dict = Body(...)):
+def oublier_demande(request: Request, corps: dict = Body(...)):
     t().oublier_demande(str(corps.get("chemin", "")))
-    return t().arbre()
+    return arbre_vu(request)
 
 
 @app.post("/api/dossier")
-def regler_dossier(corps: dict = Body(...)):
+def regler_dossier(request: Request, corps: dict = Body(...)):
     chemin = str(corps.get("chemin", ""))
     if not chemin:
         raise HTTPException(422, "Dossier manquant.")
     t().regler_dossier(chemin, album=corps.get("album"), coche=corps.get("coche"), defaut=bool(corps.get("defaut")), vider=bool(corps.get("vider")))
-    return t().arbre()
+    return arbre_vu(request)
 
 
 @app.get("/api/lot")

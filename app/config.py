@@ -5,8 +5,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import maison
+
 APPLI = "transhumance"
-VRAI = ("oui", "1", "true", "yes")
+VRAI = maison.VRAI                 # 0.6.0 : valeurs « oui » du module commun (oui, 1, true, yes, vrai)
 
 
 @dataclass
@@ -23,21 +25,24 @@ class Config:
     exclus: tuple[str, ...] = ()      # dossiers de premier niveau à ne jamais migrer
     immich_adresse: str = ""          # adresse d'Immich dans le navigateur, pour ouvrir une photo du bilan
     lecture_seule: bool = False
+    lecture_seule_origine: str = ""   # 0.6.0 : « appli » (TRANSHUMANCE_LECTURE_SEULE), « maison » (MAISON_LECTURE_SEULE) ou « »
     attente_connexion: bool = True
     attente_files: float = 5.0        # secondes entre deux regards sur les files d'Immich
     delai_files: float = 3600.0       # attente maximale des files pour un dossier
     marge_place: float = 0.8          # part de la place libre qu'un lot peut occuper
-    jeton_millesime: str = ""         # 0.3.0 : jeton de Millésime pour /externe/demandes ; vide : adresse fermée
+    jeton_millesime: str = ""         # 0.3.0 : jeton propre de Millésime pour /externe/demandes ; 0.6.0 : MAISON_JETON aussi
     extra: dict = field(default_factory=dict)
 
 
 def charger() -> Config:
     e = os.environ.get
-    manquantes = [n for n in ("TRANSHUMANCE_PASSWORD", "TRANSHUMANCE_IMMICH_CLE", "TRANSHUMANCE_RACINE_IMMICH") if not e(n)]
+    mdp = maison.mot_de_passe("TRANSHUMANCE_PASSWORD")     # 0.6.0 : MAISON_PASSWORD, repli sur l'ancien nom
+    manquantes = (([] if mdp else ["MAISON_PASSWORD (ou TRANSHUMANCE_PASSWORD)"])
+                  + [n for n in ("TRANSHUMANCE_IMMICH_CLE", "TRANSHUMANCE_RACINE_IMMICH") if not e(n)])
     if manquantes:
         raise SystemExit("Variables absentes : " + ", ".join(manquantes) + ". Transhumance ne démarre pas.")
     return Config(
-        password=e("TRANSHUMANCE_PASSWORD"),
+        password=mdp,
         immich_url=e("TRANSHUMANCE_IMMICH_URL", "http://immich_server:2283").rstrip("/"),
         immich_cle=e("TRANSHUMANCE_IMMICH_CLE"),
         photos=Path(e("TRANSHUMANCE_PHOTOS", "/photos")),
@@ -47,7 +52,9 @@ def charger() -> Config:
         pellicule=e("TRANSHUMANCE_PELLICULE", "Pellicule"),
         albums=e("TRANSHUMANCE_ALBUMS", "Albums"),
         exclus=tuple(x.strip() for x in e("TRANSHUMANCE_EXCLUS", "").split("|") if x.strip()),
-        immich_adresse=e("TRANSHUMANCE_IMMICH_ADRESSE", "").rstrip("/"),
-        lecture_seule=e("TRANSHUMANCE_LECTURE_SEULE", "").strip().lower() in VRAI,
+        immich_adresse=e("TRANSHUMANCE_IMMICH_ADRESSE", "").rstrip("/"),   # 0.6.0 : repli de l'annuaire (tuile « Immich »)
+        # 0.6.0 : MAISON_LECTURE_SEULE pour toute la maison ; TRANSHUMANCE_LECTURE_SEULE (« oui » ou « non ») l'emporte
+        lecture_seule=maison.lecture_seule("TRANSHUMANCE_LECTURE_SEULE"),
+        lecture_seule_origine=maison.origine_lecture_seule("TRANSHUMANCE_LECTURE_SEULE"),
         jeton_millesime=e("TRANSHUMANCE_JETON_MILLESIME", "").strip(),
     )

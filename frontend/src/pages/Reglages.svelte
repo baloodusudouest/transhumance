@@ -19,9 +19,14 @@
 <section class="rounded-2xl border bg-card p-5" aria-label="Écriture">
   <h2 class="text-lg font-semibold">Écriture</h2>
   <p class="mt-1 text-sm text-muted-foreground">
-    {session.lecture_seule
-      ? "Lecture seule : Transhumance montre l'arbre et les bilans, n'envoie rien et ne supprime rien. À retirer dans la stack (TRANSHUMANCE_LECTURE_SEULE) pour migrer."
-      : "Transhumance envoie et supprime sur ton clic. Pour seulement regarder : TRANSHUMANCE_LECTURE_SEULE=oui dans la stack."}
+    <!-- 0.6.0 : la lecture seule vient de toute la maison (MAISON_LECTURE_SEULE) ou de cette appli (TRANSHUMANCE_LECTURE_SEULE) -->
+    {#if !session.lecture_seule}
+      Transhumance envoie et supprime sur ton clic. Pour seulement regarder : MAISON_LECTURE_SEULE=oui (toute la maison) ou TRANSHUMANCE_LECTURE_SEULE=oui (cette appli) dans la stack.
+    {:else if session.lecture_seule_origine === 'maison'}
+      Lecture seule pour toute la maison (MAISON_LECTURE_SEULE) : Transhumance montre l'arbre et les bilans, n'envoie rien et ne supprime rien. Pour migrer : retirer MAISON_LECTURE_SEULE, ou TRANSHUMANCE_LECTURE_SEULE=non pour cette appli seule.
+    {:else}
+      Lecture seule pour cette appli (TRANSHUMANCE_LECTURE_SEULE) : Transhumance montre l'arbre et les bilans, n'envoie rien et ne supprime rien. À retirer dans la stack pour migrer.
+    {/if}
   </p>
   {#if d?.dossier.exclus.length}
     <p class="mt-2 text-sm text-muted-foreground">Jamais migrés : {d.dossier.exclus.join(', ')}.</p>

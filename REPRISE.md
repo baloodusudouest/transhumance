@@ -2,8 +2,9 @@
 
 À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`.
 
-## Où on en est (15/11/2026)
+## Où on en est (16/11/2026)
 
+- **0.6.0** (16/11/2026) : variables communes de la maison — `app/maison.py` (contrat 1, copié du socle, ne jamais le retoucher : empreinte testée). `app/config.py` : `maison.mot_de_passe("TRANSHUMANCE_PASSWORD")`, `maison.lecture_seule("TRANSHUMANCE_LECTURE_SEULE")` + `lecture_seule_origine` (montrée dans `Reglages.svelte`). `app/main.py` : `/externe/demandes` accepte `TRANSHUMANCE_JETON_MILLESIME` et `maison.jetons()` (`maison.jeton_valide`) ; `ANNUAIRE` + `arbre_vu` : `immich_adresse` lue dans l'Anneau (tuile « Immich »), repli `TRANSHUMANCE_IMMICH_ADRESSE`. Jamais essayé sur la vraie installation : les nouvelles variables ne sont pas encore dans la stack.
 - **0.5.0** (15/11/2026) : format commun — pilule en bas sur iPhone, rail sur PC, page `Reglages.svelte` (écriture, exclus, journal, version, déconnexion) ; `Services.svelte` ne garde que les services. Écart retiré du § 7 de `socle/docs/format.md`.
 - **0.3.1** (13/11/2026) : toujours sombre (blocs `prefers-color-scheme: light` retirés, variante `dark:` partout).
 - **0.3.0** (13/11/2026) : `/externe/demandes` (jeton de Millésime), `Transhumance.demander`, `demande` sur les nœuds de l'arbre, pastille dans `Migrer.svelte`. Jamais essayé sur la vraie installation.
