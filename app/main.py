@@ -1,14 +1,16 @@
 """Transhumance : interface et adresses. Une seule porte : le mot de passe commun.
 
 Routes : /health (publique), /api/session, /api/connexion, /api/deconnexion, puis l'arbre, le lot,
-le bilan, la suppression et le retour arrière."""
+le bilan, la suppression et le retour arrière ; 0.7.0 : /api/reglages, /api/restaurer, /externe/sauvegarde."""
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
 import threading
+import re
 import time
+import urllib.error
 from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -58,10 +60,13 @@ def t() -> Transhumance:
 async def garde(request: Request, appel):
     chemin = request.url.path
     if chemin.startswith("/externe/"):
-        # 0.3.0 : une autre appli de la maison (Millésime) demande le passage d'un dossier, avec son jeton.
-        # 0.6.0 : son jeton propre (TRANSHUMANCE_JETON_MILLESIME) ou le jeton commun (MAISON_JETON, MAISON_JETON_ANCIEN),
-        # comparés en temps constant ; aucun jeton posé : adresse fermée.
-        acceptes = tuple(j for j in (ETAT["cfg"].jeton_millesime, *maison.jetons()) if j)
+        # Portes des autres applis de la maison : /externe/demandes (Millésime, 0.3.0) et /externe/sauvegarde
+        # (l'Anneau, 0.7.0). 0.7.0 : jeton commun seul (MAISON_JETON, MAISON_JETON_ANCIEN), comparé en temps constant ;
+        # l'ancien jeton de Millésime n'est plus lu. Aucun jeton commun posé : porte fermée (404). La session n'est
+        # pas demandée ici.
+        acceptes = maison.jetons()
+        if not acceptes:
+            return JSONResponse({"detail": "Adresse fermée."}, status_code=404)
         if not maison.jeton_valide(maison.jeton_propose(request.headers), acceptes):
             return JSONResponse({"detail": "Jeton manquant ou invalide."}, status_code=401)
     if chemin.startswith("/api/"):
@@ -89,10 +94,10 @@ ANNUAIRE = maison.Annuaire()
 
 
 def immich_adresse(request: Request) -> str:
-    """0.6.0 : adresse d'Immich pour le navigateur (liens du bilan), lue dans l'Anneau (tuile « Immich », privée si
-    la page vient de Tailscale) ; repli : TRANSHUMANCE_IMMICH_ADRESSE."""
-    return ANNUAIRE.adresse("Immich", prive=maison.est_prive(request.headers.get("host", "")),
-                            repli=ETAT["cfg"].immich_adresse)
+    """Adresse d'Immich pour le navigateur (liens du bilan), lue dans l'Anneau (tuile « Immich », privée si la page
+    vient de Tailscale). 0.7.0 : plus de variable de repli (TRANSHUMANCE_IMMICH_ADRESSE retirée) ; Anneau injoignable
+    et rien en mémoire : pas de lien, le bilan reste lisible."""
+    return ANNUAIRE.adresse("Immich", prive=maison.est_prive(request.headers.get("host", "")))
 
 
 def arbre_vu(request: Request) -> dict:
@@ -177,9 +182,88 @@ def connexions():
     except OSError:
         inscriptible = False
     return {"immich": immich, "dossier": {"lisible": cfg.photos.is_dir(), "inscriptible": inscriptible,
-                                          "exclus": list(cfg.exclus)},
+                                          "exclus": t().exclus()},
             "version": __version__, "lecture_seule": cfg.lecture_seule, "lecture_seule_origine": cfg.lecture_seule_origine,
             "journal": [dict(l) for l in t().base.tous("SELECT le, quoi, detail FROM journal ORDER BY id DESC LIMIT 60")]}
+
+
+# ---------------------------------------------------------------- réglages d'usage (0.7.0)
+
+APPLI_ID = "transhumance"            # nom du dépôt : nom de l'appli dans les sauvegardes de l'Anneau
+# Clés qui ne sortent jamais de l'appli, même si un jour elles entraient dans les réglages : la clé d'Immich, les
+# adresses et chemins de la stack, le mot de passe. (maison.est_secret écarte en plus tout nom qui ressemble à un secret.)
+EXCLUS_SAUVEGARDE = ("immich_cle", "immich_url", "racine_immich", "photos", "data", "password", "mot_de_passe")
+JOUR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+@app.get("/api/reglages")
+def lire_reglages():
+    return t().reglages_tout()
+
+
+@app.put("/api/reglages")
+def changer_reglages(corps: dict = Body(...)):
+    """Change les réglages d'usage. Valeur de mauvais type : 400, rien n'est changé. Permis en lecture seule : ni
+    Immich ni le dossier des photos ne sont touchés."""
+    try:
+        return t().changer_reglages(corps)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/externe/sauvegarde")
+def sauvegarde():
+    """L'Anneau collecte les réglages chaque nuit (jeton commun). Réglages et version seulement : ni variable, ni
+    chemin, ni secret."""
+    return maison.sauvegarde(APPLI_ID, __version__, t().reglages_tout(), exclus=EXCLUS_SAUVEGARDE)
+
+
+def _chez_l_anneau(le: str = "") -> dict:
+    """Lit les sauvegardes chez l'Anneau ; message clair s'il ne répond pas ou n'a rien."""
+    try:
+        return maison.lire_sauvegarde(APPLI_ID, le)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(404, "L'Anneau n'a pas de sauvegarde de Transhumance" + (f" du {le}." if le else " pour l'instant.")) from exc
+        raise HTTPException(503, f"L'Anneau a répondu {exc.code} : sauvegardes illisibles pour l'instant.") from exc
+    except Exception as exc:  # noqa: BLE001 — Anneau injoignable, réponse illisible : message, jamais d'erreur de page
+        raise HTTPException(503, f"L'Anneau est injoignable ({exc.__class__.__name__}) : réessaie plus tard.") from exc
+
+
+def _sauvegarde_du(le: str) -> dict:
+    if not JOUR.match(le or ""):
+        raise HTTPException(400, "Date attendue sous la forme AAAA-MM-JJ.")
+    sauves = _chez_l_anneau(le)
+    if not isinstance(sauves, dict) or not isinstance(sauves.get("reglages"), dict):
+        raise HTTPException(404, f"L'Anneau n'a pas de réglages de Transhumance du {le}.")
+    return sauves
+
+
+@app.get("/api/restaurer")
+def restaurer_voir(le: str = ""):
+    """Sans « le » : les dates des sauvegardes. Avec « le » : ce qui changerait (actuel → sauvegardé)."""
+    if not le:
+        dates = (_chez_l_anneau() or {}).get("dates") or []
+        if not dates:
+            raise HTTPException(404, "L'Anneau n'a pas de sauvegarde de Transhumance pour l'instant.")
+        return {"dates": dates}
+    sauves = _sauvegarde_du(le)
+    return {"le": le, "version": sauves.get("version", ""),
+            "differences": maison.differences(t().reglages_tout(), sauves["reglages"], EXCLUS_SAUVEGARDE)}
+
+
+@app.post("/api/restaurer")
+def restaurer(corps: dict = Body(...)):
+    """Applique les différences d'une sauvegarde (réglages seulement). Permis en lecture seule."""
+    le = str(corps.get("le", ""))
+    sauves = _sauvegarde_du(le)
+    diff = maison.differences(t().reglages_tout(), sauves["reglages"], EXCLUS_SAUVEGARDE)
+    if not diff:
+        raise HTTPException(404, f"Rien à restaurer : les réglages sont déjà ceux du {le}.")
+    try:
+        return t().changer_reglages({d["cle"]: d["sauve"] for d in diff}, par=f"Réglage restauré (sauvegarde du {le})")
+    except ValueError as exc:
+        raise HTTPException(400, f"La sauvegarde du {le} contient une valeur illisible : {exc}") from exc
 
 
 # ---------------------------------------------------------------- demandes des autres applis (jeton)

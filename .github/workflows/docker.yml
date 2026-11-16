@@ -56,7 +56,7 @@ jobs:
         run: |
           image=ghcr.io/${{ github.repository_owner }}/transhumance:${{ steps.v.outputs.version }}
           if timeout 30 docker run --rm "$image" >/dev/null 2>&1; then echo "a démarré sans ses variables"; exit 1; fi
-          docker run -d --name essai -e TRANSHUMANCE_PASSWORD=essai-essai -e TRANSHUMANCE_IMMICH_CLE=x -e TRANSHUMANCE_RACINE_IMMICH=/x -p 8097:8097 "$image"
+          docker run -d --name essai -e MAISON_PASSWORD=essai-essai-essai -e TRANSHUMANCE_IMMICH_CLE=x -e TRANSHUMANCE_RACINE_IMMICH=/x -p 8097:8097 "$image"
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:8097/health && break; sleep 1; done
           curl -fs http://127.0.0.1:8097/health
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8097/api/arbre)" = 401

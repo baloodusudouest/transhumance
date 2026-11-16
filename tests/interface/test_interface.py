@@ -140,6 +140,37 @@ def test_5_reglages_journal_version_deconnexion(page):
     assert page.get_by_role("region", name="Journal").count() == 0 and page.get_by_role("button", name="Se déconnecter").count() == 0
 
 
+def test_5b_reglages_puis_restaurer(page):
+    """0.7.0 : les réglages d'usage se changent dans Réglages ; Restaurer montre les différences puis les applique."""
+    page.get_by_role("link", name="Réglages").click()
+    bloc = page.get_by_role("region", name="Réglages", exact=True)
+    champ = bloc.get_by_label("Dossiers jamais migrés")
+    champ.wait_for()
+    assert champ.input_value() == "Scans"
+    champ.fill("Scans\nAlbums")
+    bloc.get_by_role("button", name="Enregistrer").click()
+    bloc.get_by_text("Réglages enregistrés.").wait_for()
+    page.get_by_role("region", name="Journal").get_by_text("Réglage changé : exclus").first.wait_for()
+    r = page.get_by_role("region", name="Restaurer")
+    r.get_by_role("button", name="Voir les sauvegardes").click()
+    diff = r.get_by_role("list", name="Différences")
+    diff.wait_for()                                                      # 2026-11-15 : Scans, au lieu de Scans, Albums
+    assert "Scans, Albums → Scans" in diff.inner_text()
+    r.get_by_label("Sauvegarde du").select_option("2026-11-14")
+    r.get_by_text("Scans, Albums → Scans, Pense bete").wait_for()
+    r.get_by_role("button", name="Restaurer ces réglages").click()
+    r.get_by_text("Réglages du 2026-11-14 restaurés.").wait_for()
+    assert champ.input_value() == "Scans\nPense bete"
+    page.get_by_role("link", name="Migrer").click()
+    page.get_by_role("heading", level=1, name="Migrer").wait_for()
+    page.get_by_role("checkbox", name="Cocher Pense bete", exact=True).wait_for()
+    assert page.get_by_role("checkbox", name="Cocher Pense bete", exact=True).is_disabled()   # exclu tout de suite
+    page.get_by_role("link", name="Réglages").click()                    # remettre comme avant pour la suite
+    bloc.get_by_label("Dossiers jamais migrés").fill("Scans")
+    bloc.get_by_role("button", name="Enregistrer").click()
+    bloc.get_by_text("Réglages enregistrés.").wait_for()
+
+
 def test_6_sur_iphone_la_pilule_en_bas(page, monde):
     if True:                                                                        # même navigateur, contexte d'iPhone
         c = page.context.browser.new_context(viewport={"width": 390, "height": 664}, device_scale_factor=3, is_mobile=True, has_touch=True)
@@ -159,5 +190,11 @@ def test_6_sur_iphone_la_pilule_en_bas(page, monde):
             pg.get_by_role("link", name=nom).click()
             pg.get_by_role("heading", level=1, name=nom).wait_for()
             assert pg.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), nom   # rien ne déborde
+        # 0.7.0 : la tuile Restaurer, ouverte, ne déborde pas non plus
+        r = pg.get_by_role("region", name="Restaurer")
+        r.get_by_role("button", name="Voir les sauvegardes").click()
+        r.get_by_label("Sauvegarde du").select_option("2026-11-14")
+        r.get_by_role("list", name="Différences").wait_for()
+        assert pg.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
         assert not erreurs, erreurs
         c.close()

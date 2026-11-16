@@ -4,6 +4,16 @@
 
 ## Où on en est (16/11/2026)
 
+- **0.7.0** (16/11/2026) : réglages dans l'appli, sauvegarde et restauration ; anciens noms retirés. `app/maison.py` passe au contrat 2 (copié du socle, ne jamais le retoucher : empreinte testée).
+  - Réglages d'usage (`app/passage.py`) : `exclus` (liste de dossiers de premier niveau) dans `maison.Reglages(<data>/reglages.json, REGLAGES_DEFAUTS, REGLAGES_VARIABLES)`, repris une fois de `TRANSHUMANCE_EXCLUS` au premier démarrage (ligne « Réglage repris de la stack : exclus » au journal, sans la valeur) ; `auto_demandes` reste dans la table `reglages` de la base (0.4.0). `Transhumance.exclus()`, `reglages_tout()`, `changer_reglages()` (tout vérifié avant d'écrire, une ligne au journal par réglage changé, permis en lecture seule : ni Immich ni le dossier ne sont touchés). `Config.exclus`, `Config.immich_adresse`, `Config.jeton_millesime` retirés (`app/config.py`).
+  - Adresses (`app/main.py`) : `GET/PUT /api/reglages` (session ; mauvais type → 400), `GET /externe/sauvegarde` (`maison.sauvegarde("transhumance", …, exclus=EXCLUS_SAUVEGARDE)`), `GET /api/restaurer` (dates, ou différences avec `?le=`), `POST /api/restaurer` (applique les différences). L'Anneau injoignable → 503, rien à restaurer → 404, avec un message.
+  - Portes `/externe/…` : `maison.jetons()` seul ; aucun jeton commun posé → 404, mauvais jeton → 401. `TRANSHUMANCE_JETON_MILLESIME` n'ouvre plus rien (testé).
+  - Mot de passe : `maison.mot_de_passe()` sans ancien nom ; moins de 12 caractères → refus de démarrer (« MAISON_PASSWORD est absent ou trop court… »).
+  - Adresse d'Immich dans le navigateur : `maison.Annuaire` seul ; Anneau injoignable et rien en mémoire → pas de lien dans le bilan (le reste s'affiche).
+  - Écran : `Reglages.svelte` — tuiles « Réglages » (dossiers jamais migrés, passage automatique, Enregistrer) et « Restaurer » (date, différences, confirmer). Tests d'écran : `test_5b_reglages_puis_restaurer`, tuile Restaurer ouverte sur iPhone sans débordement ; le serveur de démonstration a un faux Anneau.
+  - **Déploiement en deux temps** : d'abord la nouvelle image avec la stack actuelle (les réglages sont repris des anciennes variables au premier démarrage), vérifier Réglages, puis la nouvelle stack sans les anciennes lignes (`TRANSHUMANCE_PASSWORD`, `TRANSHUMANCE_JETON_MILLESIME`, `TRANSHUMANCE_IMMICH_ADRESSE`, `TRANSHUMANCE_EXCLUS`).
+  - Attention : Millésime 2.11 envoie encore son ancien jeton de paire en premier tant que `MILLESIME_JETON_TRANSHUMANCE` est posé ; Transhumance 0.7.0 le refuse (401). Les demandes de passage ne passent qu'avec un Millésime qui envoie `MAISON_JETON` (sa version nettoyée), ou une fois sa ligne `MILLESIME_JETON_TRANSHUMANCE` retirée de la stack.
+  - **Jamais essayé sur la vraie installation.**
 - **0.6.0** (16/11/2026) : variables communes de la maison — `app/maison.py` (contrat 1, copié du socle, ne jamais le retoucher : empreinte testée). `app/config.py` : `maison.mot_de_passe("TRANSHUMANCE_PASSWORD")`, `maison.lecture_seule("TRANSHUMANCE_LECTURE_SEULE")` + `lecture_seule_origine` (montrée dans `Reglages.svelte`). `app/main.py` : `/externe/demandes` accepte `TRANSHUMANCE_JETON_MILLESIME` et `maison.jetons()` (`maison.jeton_valide`) ; `ANNUAIRE` + `arbre_vu` : `immich_adresse` lue dans l'Anneau (tuile « Immich »), repli `TRANSHUMANCE_IMMICH_ADRESSE`. Jamais essayé sur la vraie installation : les nouvelles variables ne sont pas encore dans la stack.
 - **0.5.0** (15/11/2026) : format commun — pilule en bas sur iPhone, rail sur PC, page `Reglages.svelte` (écriture, exclus, journal, version, déconnexion) ; `Services.svelte` ne garde que les services. Écart retiré du § 7 de `socle/docs/format.md`.
 - **0.3.1** (13/11/2026) : toujours sombre (blocs `prefers-color-scheme: light` retirés, variante `dark:` partout).
@@ -35,6 +45,7 @@
 - Un fichier qu'Immich ne connaît pas n'est jamais touché ; un dossier n'est jamais supprimé.
 - Le journal ne contient aucun nom de personne. Le dépôt est public : exemples inventés seulement.
 - Lecture seule refusée deux fois : dans `Transhumance.exiger_ecriture` et dans `Immich._garde`.
+- Les réglages ne sortent que par `/externe/sauvegarde` : réglages et version seulement (`EXCLUS_SAUVEGARDE` + `maison.est_secret`). Restaurer ne change que les réglages.
 
 ## Limites connues
 

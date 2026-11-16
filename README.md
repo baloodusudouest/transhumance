@@ -26,9 +26,18 @@ Tant que les originaux sont là, **Défaire** retire les copies et remet le doss
 
 ## Variables
 
-Voir `docker-compose.yml`. Sans mot de passe (`MAISON_PASSWORD`, ou `TRANSHUMANCE_PASSWORD` en repli), `TRANSHUMANCE_IMMICH_CLE`
-et `TRANSHUMANCE_RACINE_IMMICH`, le conteneur ne démarre pas. Premier lancement conseillé avec `TRANSHUMANCE_LECTURE_SEULE=oui`
-(ou `MAISON_LECTURE_SEULE=oui` pour toute la maison).
+Voir `docker-compose.yml`. Sans `MAISON_PASSWORD` (12 caractères au moins), `TRANSHUMANCE_IMMICH_CLE` et
+`TRANSHUMANCE_RACINE_IMMICH`, le conteneur ne démarre pas. Premier lancement conseillé avec `TRANSHUMANCE_LECTURE_SEULE=oui`
+(ou `MAISON_LECTURE_SEULE=oui` pour toute la maison). `MAISON_JETON` ouvre les portes des autres applis de la maison
+(`/externe/demandes` pour Millésime, `/externe/sauvegarde` pour l'Anneau) ; vide, elles restent fermées.
+
+## Réglages
+
+Les dossiers jamais migrés et le passage automatique des demandes de Millésime se règlent dans l'écran **Réglages**
+(gardés dans `reglages.json` du dossier de données). Au premier démarrage, la valeur de l'ancienne variable de la stack
+est reprise une fois, puis la variable n'est plus lue. L'Anneau sauvegarde ces réglages chaque nuit
+(`GET /externe/sauvegarde`, jeton commun : réglages et version seulement, jamais de secret) ; **Restaurer** montre les
+différences avec une sauvegarde et les applique. Restaurer ne touche ni Immich ni les photos.
 
 ## Tests
 

@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 
 import httpx
 
+from . import maison
 from .base import Base, maintenant
 from .config import Config
 from .immich import LectureSeule, ErreurImmich, Immich, empreinte
@@ -44,11 +45,63 @@ class Refus(Exception):
         self.code = code
 
 
+# 0.7.0 : réglages d'usage. « exclus » est gardé dans reglages.json (maison.Reglages, repris une fois de la variable
+# de la stack) ; « auto_demandes » reste dans la table reglages de la base, où il était depuis la 0.4.0.
+REGLAGES_DEFAUTS = {"exclus": []}
+REGLAGES_VARIABLES = {"exclus": "TRANSHUMANCE_EXCLUS"}      # lue au premier démarrage seulement, puis plus jamais
+
+
 class Transhumance:
     def __init__(self, cfg: Config, base: Base, transport=None):
         self.cfg, self.base, self._transport = cfg, base, transport
         self.tache: dict = {"en_cours": False, "message": "", "fait": 0, "total": 0, "erreur": None}
         self.suppression: dict = {"en_cours": False, "dossier": "", "fait": 0, "total": 0, "etape": ""}
+        self.reglages = maison.Reglages(cfg.data / "reglages.json", REGLAGES_DEFAUTS, REGLAGES_VARIABLES)
+        for k in self.reglages.repris:                     # la valeur n'est pas écrite : des noms de dossiers
+            self.base.noter(f"Réglage repris de la stack : {k}", {"variable": REGLAGES_VARIABLES[k]})
+
+    # ------------------------------------------------------------ 0.7.0 : réglages d'usage (écran Réglages)
+    def exclus(self) -> list[str]:
+        return list(self.reglages.get("exclus"))
+
+    def reglages_tout(self) -> dict:
+        return {"exclus": self.exclus(), "auto_demandes": self.auto_demandes()}
+
+    def changer_reglages(self, valeurs: dict, par: str = "Réglage changé") -> dict:
+        """Vérifie toutes les valeurs avant d'en écrire une (ValueError, message clair) ; une ligne au journal par
+        réglage changé. Ne touche ni Immich ni le dossier des photos : permis aussi en lecture seule."""
+        if not isinstance(valeurs, dict):
+            raise ValueError("Réglages attendus sous forme d'objet.")
+        inconnues = sorted(set(valeurs) - {"exclus", "auto_demandes"})
+        if inconnues:
+            raise ValueError("Réglage inconnu : " + ", ".join(inconnues) + ".")
+        propres: dict = {}
+        if "exclus" in valeurs:
+            v = valeurs["exclus"]
+            if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                raise ValueError("exclus : une liste de noms de dossiers est attendue.")
+            noms = []
+            for x in (" ".join(x.split()) for x in v):
+                if not x:
+                    continue
+                if "/" in x or x in (".", ".."):
+                    raise ValueError(f"exclus : « {x} » n'est pas un dossier de premier niveau (un nom, sans /).")
+                if x not in noms:
+                    noms.append(x)
+            propres["exclus"] = noms
+        if "auto_demandes" in valeurs:
+            if not isinstance(valeurs["auto_demandes"], bool):
+                raise ValueError("auto_demandes : oui ou non (true / false) est attendu.")
+            propres["auto_demandes"] = valeurs["auto_demandes"]
+        avant = self.reglages_tout()
+        if "exclus" in propres:
+            self.reglages.changer({"exclus": propres["exclus"]})
+        if "auto_demandes" in propres:
+            self.base.ecrire("auto_demandes", propres["auto_demandes"])
+        for k, v in propres.items():
+            if avant[k] != v:
+                self.base.noter(f"{par} : {k}")
+        return self.reglages_tout()
 
     def immich(self) -> Immich:
         return Immich(self.cfg.immich_url, self.cfg.immich_cle, self.cfg.lecture_seule, self._transport)
@@ -211,7 +264,7 @@ class Transhumance:
             self.base.executer("INSERT INTO dossiers(chemin, coche) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET coche = excluded.coche", (d, int(d in choisis)))
 
     def _exclu(self, dossier: str) -> bool:
-        return PurePosixPath(dossier).parts[:1] in [(x,) for x in self.cfg.exclus]
+        return PurePosixPath(dossier).parts[:1] in [(x,) for x in self.exclus()]
 
     def _descendance(self, chemin: str) -> list[str]:
         tous = {l["dossier"] for l in self.base.tous("SELECT DISTINCT dossier FROM photos")}
@@ -349,7 +402,7 @@ class Transhumance:
         for n in noeuds.values():
             n["enfants"].sort(key=str.casefold)
         return {"racine": ".", "noeuds": noeuds, "inventaire": self.base.lire("inventaire"),
-                "tache": self.tache, "lecture_seule": self.cfg.lecture_seule, "immich_adresse": self.cfg.immich_adresse,
+                "tache": self.tache, "lecture_seule": self.cfg.lecture_seule, "immich_adresse": "",   # 0.7.0 : rempli par main (annuaire)
                 "auto_demandes": self.auto_demandes()}
 
     # ================================================================ le passage

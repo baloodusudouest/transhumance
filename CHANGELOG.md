@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.7.0 — 16 novembre 2026
+
+- **Réglages dans l'appli.** Les dossiers jamais migrés se règlent maintenant dans l'écran Réglages (un dossier de premier niveau par ligne), à côté du passage automatique des demandes de Millésime. Au premier démarrage, Transhumance reprend une fois la valeur de l'ancienne variable `TRANSHUMANCE_EXCLUS` (une ligne au journal) ; ensuite la variable n'est plus lue.
+- **Sauvegarde par l'Anneau.** L'Anneau peut lire les réglages chaque nuit (`GET /externe/sauvegarde`, jeton commun seulement ; sans jeton posé, la porte est fermée). Il ne reçoit que les réglages et la version : ni variable, ni chemin, ni clé d'Immich.
+- **Restaurer.** Nouvelle tuile dans Réglages : choisir une date, voir ce qui changerait (avant → sauvegardé), confirmer. Seuls les réglages changent, même en lecture seule ; Anneau injoignable ou rien à restaurer : un message, pas d'erreur.
+- **Anciens noms retirés.** Le mot de passe vient de `MAISON_PASSWORD` seul (12 caractères au moins ; sans lui, Transhumance ne démarre pas) ; `TRANSHUMANCE_PASSWORD` n'est plus lu. Les demandes de Millésime ne s'ouvrent plus qu'avec `MAISON_JETON` (`TRANSHUMANCE_JETON_MILLESIME` n'est plus lu). L'adresse d'Immich des liens du bilan vient seulement de l'Anneau (`TRANSHUMANCE_IMMICH_ADRESSE` n'est plus lue). `TRANSHUMANCE_LECTURE_SEULE` reste.
+- Rien ne change dans le passage des photos, le bilan ni la suppression : mêmes preuves, même lecture seule à deux endroits.
+- Tests : 42 du serveur, 7 d'écran.
+
 ## 0.6.0 — 16 novembre 2026
 
 - **Variables communes de la maison** (module `app/maison.py`, copié du socle sans retouche). Rien ne change tant que la stack n'a pas les nouvelles variables : chaque ancien nom reste lu en repli.
