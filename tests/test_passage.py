@@ -660,3 +660,13 @@ def test_071_retrait_d_immich_fait_meme_si_la_boucle_s_arrete(monde, monkeypatch
         t.supprimer("Pellicule/2020")
     supprimees = t.base.tous("SELECT ancien_id FROM photos WHERE etat = 'supprimee'")
     assert len(supprimees) == 1 and supprimees[0]["ancien_id"] not in im.photos    # l'ancienne est bien retirée
+
+
+def test_073_un_fichier_refuse_ne_bloque_pas_le_lot(monde):
+    t, im, ids, photos = monde
+    im.refuser.add("IMG_0001.jpg")
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    e = etats(t)
+    assert e["IMG_0001.jpg"] == "ecart" and e["IMG_0002.jpg"] == "prete" and e["IMG_0003.jpg"] == "prete"
+    assert not t.bilan("Pellicule/2020")["supprimable"]          # l'écart « refusé » est bloquant

@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 0.7.3 — 17 novembre 2026 (corrections de l'audit, suite)
+- Un fichier refusé par Immich à l'envoi (abîmé, format refusé) ne bloque plus tout le lot à chaque relance : il passe en écart bloquant « refusé » et reste en place ; les fichiers suivants partent. Immich injoignable ou clé refusée arrêtent toujours le lot.
+
 ## 0.7.2 — 17 novembre 2026 (connexion plus sûre)
 - **Connexion plus sûre** (audit du 17/11/2026, même correctif dans toutes les applis maison) :
   - un cookie portant un caractère non ASCII donnait une erreur 500 sur toute l'API ; il est maintenant simplement refusé ;

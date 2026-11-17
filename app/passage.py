@@ -31,6 +31,7 @@ ACCOMPAGNEMENTS = (".xmp",)
 ECARTS = {
     "empreinte": ("La copie rangée par Immich n'est pas identique au fichier d'origine.", True),
     "introuvable": ("Le fichier d'origine n'est plus dans le dossier.", True),
+    "refuse": ("Immich a refusé ce fichier à l'envoi (fichier abîmé ou format refusé) : il reste en place.", True),
     "copie_absente": ("Immich n'a plus la copie.", True),
     "date": ("La date de la copie n'est pas celle de l'ancienne photo.", False),
     "visage": ("Des personnes nommées sur l'ancienne photo ne le sont pas sur la copie.", False),
@@ -657,7 +658,14 @@ class Transhumance:
                 # Les parties vidéo des photos animées d'abord : la photo s'y rattache à l'envoi
                 for l in self.base.tous("SELECT * FROM photos WHERE dossier = ? AND etat = 'vue' ORDER BY cachee DESC, rel", (d,)):
                     self.tache["message"] = f"Envoi de {d}"
-                    self._envoyer(im, l, album_id, nouveaux)
+                    try:     # 0.7.3 : un fichier refusé par Immich ne bloque plus tout le lot à chaque relance
+                        self._envoyer(im, l, album_id, nouveaux)
+                    except ErreurImmich as exc:
+                        msg = str(exc)
+                        if "a refusé" not in msg or "(401)" in msg or "(403)" in msg:
+                            raise                   # Immich injoignable ou clé refusée : le lot s'arrête, comme avant
+                        log.warning("Fichier refusé par Immich : %s (%s)", l["rel"], exc)
+                        self._etat(l["ancien_id"], "ecart", ecarts=["refuse"])
                     self.tache["fait"] += 1
             self._attendre_files(im)
             # 0.1.4 : le compteur repart pour le contrôle, qui est la partie la plus longue

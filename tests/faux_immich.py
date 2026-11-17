@@ -31,6 +31,7 @@ class FauxImmich:
         self.libre = 10 ** 12
         self.n = 0
         self.abimer: set[str] = set()
+        self.refuser: set[str] = set()       # 0.7.3 : fichiers qu'Immich refuse à l'envoi (415)
         self.tags_refuses = 0                       # nombre de reports de tag qu'Immich refuse (500) avant d'accepter
         self.personnes_refusees: set[str] = set()   # personnes dont Immich refuse le rattachement
         self.reconnaissance: dict | None = {"enabled": True, "urls": ["http://pc-invente:3003", "http://immich-machine-learning:3003"]}          # noms de fichiers dont la copie sera abîmée au rangement
@@ -167,6 +168,8 @@ class FauxImmich:
         for p in self.photos.values():
             if not p.get("libraryId") and p["checksum"] == somme:
                 return httpx.Response(200, json={"id": p["id"], "status": "duplicate"})
+        if nom in self.refuser:
+            return httpx.Response(415, json={"message": "format refusé"})
         ident = self._id("neuf")
         if nom in self.abimer:
             somme = base64.b64encode(hashlib.sha1(contenu + b"x").digest()).decode()
