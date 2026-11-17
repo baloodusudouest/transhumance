@@ -615,3 +615,48 @@ def test_070_adresse_d_immich_par_l_annuaire_seul(client, monkeypatch):
     assert client.get("/api/arbre").json()["immich_adresse"] == ""                          # pas de lien, pas d'erreur
     monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton=""))                        # sans jeton : pas d'appel
     assert client.get("/api/arbre").json()["immich_adresse"] == ""
+
+
+# ---------------------------------------------------------------- 0.7.1 (audit du 17/11/2026)
+
+def test_071_un_dossier_ne_designe_pas_ses_voisins(tmp_path):
+    """« _ » n'est plus un joker et la casse compte : Voyage_2019 ne prend ni « Voyage 2019 » ni « voyage_2019 »."""
+    photos = tmp_path / "photos"
+    im = FauxImmich(photos)
+    for rel in ("Voyage_2019/a/1.jpg", "Voyage 2019/a/2.jpg", "voyage_2019/b/3.jpg", "VoyageX2019/c/4.jpg"):
+        im.externe(poser(photos, rel))
+    cfg = Config(password=MDP, immich_url="http://immich", immich_cle=CLE, photos=photos, racine_immich=RACINE,
+                 data=tmp_path / "data", static=tmp_path / "static", attente_connexion=False, attente_files=0)
+    t = Transhumance(cfg, Base(cfg.data / "t.db"), im.transport())
+    t.inventaire()
+    assert [l["rel"] for l in t._photos_sous("Voyage_2019")] == ["Voyage_2019/a/1.jpg"]
+
+
+def test_071_xmp_partage_garde(monde):
+    """« IMG_0002.xmp » sert aussi à un autre IMG_0002.* : il reste quand IMG_0002.jpg part."""
+    t, im, ids, photos = monde
+    dossier = photos / "Pellicule/2020/2020-05-01 Fête au jardin"
+    (dossier / "IMG_0002.xmp").write_bytes(b"<x/>")
+    (dossier / "IMG_0002.png").write_bytes(b"autre")
+    assert Transhumance._accompagnement_propre(dossier / "IMG_0002.jpg") is None
+    (dossier / "IMG_0002.png").unlink()
+    assert Transhumance._accompagnement_propre(dossier / "IMG_0002.jpg") == dossier / "IMG_0002.xmp"
+
+
+def test_071_retrait_d_immich_fait_meme_si_la_boucle_s_arrete(monde, monkeypatch):
+    t, im, ids, photos = monde
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    vrai = t._fichier
+    vus = []
+
+    def fichier(rel):
+        vus.append(rel)
+        if len(vus) == 2:
+            raise OSError("partage déconnecté")
+        return vrai(rel)
+    monkeypatch.setattr(t, "_fichier", fichier)
+    with pytest.raises(OSError):
+        t.supprimer("Pellicule/2020")
+    supprimees = t.base.tous("SELECT ancien_id FROM photos WHERE etat = 'supprimee'")
+    assert len(supprimees) == 1 and supprimees[0]["ancien_id"] not in im.photos    # l'ancienne est bien retirée

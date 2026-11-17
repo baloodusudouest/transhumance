@@ -174,13 +174,8 @@ def connexions():
         immich = {"ok": False, "erreur": str(exc)}
     finally:
         im.fermer()
-    essai = cfg.photos / ".transhumance-essai"
-    try:
-        essai.write_text("ok")
-        essai.unlink()
-        inscriptible = True
-    except OSError:
-        inscriptible = False
+    # 0.7.1 : plus de fichier d'essai écrit dans le dossier des photos (même en lecture seule) : on demande au système
+    inscriptible = cfg.photos.is_dir() and os.access(cfg.photos, os.W_OK | os.X_OK)
     return {"immich": immich, "dossier": {"lisible": cfg.photos.is_dir(), "inscriptible": inscriptible,
                                           "exclus": t().exclus()},
             "version": __version__, "lecture_seule": cfg.lecture_seule, "lecture_seule_origine": cfg.lecture_seule_origine,

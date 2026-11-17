@@ -6,6 +6,7 @@ seulement pour les photos prouvées copiées. Un fichier qu'Immich ne connaît p
 from __future__ import annotations
 
 import csv
+import glob
 import json
 import logging
 import os
@@ -419,6 +420,20 @@ class Transhumance:
                 return candidat
         return None
 
+    @staticmethod
+    def _accompagnement_propre(fichier: Path) -> Path | None:
+        """0.7.1 : « IMG_1.jpg.xmp » est à ce fichier ; « IMG_1.xmp » seulement si aucun autre « IMG_1.* » n'est à côté."""
+        propre = fichier.with_name(fichier.name + ".xmp")
+        if propre.is_file():
+            return propre
+        commun = fichier.with_suffix(".xmp")
+        if commun.is_file():
+            freres = [f for f in fichier.parent.glob(glob.escape(fichier.stem) + ".*")
+                      if f != fichier and f.suffix.lower() != ".xmp" and not f.name.endswith(".xmp")]
+            if not freres:
+                return commun
+        return None
+
     def _instantane(self, im: Immich, ancien: str) -> dict:
         """Tout ce que l'ancienne photo portait : c'est ce qu'on ne retrouverait dans aucune sauvegarde de fichiers."""
         a = im.photo(ancien) or {}
@@ -666,7 +681,10 @@ class Transhumance:
     def _photos_sous(self, chemin: str) -> list:
         if chemin in (".", ""):
             return self.base.tous("SELECT * FROM photos ORDER BY rel")
-        return self.base.tous("SELECT * FROM photos WHERE dossier = ? OR dossier LIKE ? ORDER BY rel", (chemin, chemin.replace("%", "") + "/%"))
+        # 0.7.1 : préfixe exact ; « LIKE » prenait « _ » pour un joker et ignorait la casse (Voyage_2019 ⊃ Voyage 2019)
+        prefixe = chemin + "/"
+        return self.base.tous("SELECT * FROM photos WHERE dossier = ? OR substr(dossier, 1, ?) = ? ORDER BY rel",
+                              (chemin, len(prefixe), prefixe))
 
     def bilan(self, chemin: str) -> dict:
         photos = self._photos_sous(chemin)
@@ -686,7 +704,8 @@ class Transhumance:
                                "phrase": ECARTS[e][0], "bloquant": ECARTS[e][1], "accepte": bool(l["accepte"]), "personnes": perdus})
         inconnus = sum(r["inconnus"] for r in self.base.tous("SELECT chemin, inconnus FROM dossiers")
                        if chemin in (".", "") or r["chemin"] == chemin or r["chemin"].startswith(chemin + "/"))
-        en_attente = [l for l in visibles if l["etat"] == "ecart" and (not l["accepte"] or any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
+        # 0.7.1 : la partie vidéo d'une photo animée (cachée) compte aussi : son écart bloque la suppression
+        en_attente = [l for l in photos if l["etat"] == "ecart" and (not l["accepte"] or any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
         pretes = [l for l in visibles if l["etat"] == "prete" or (l["etat"] == "ecart" and l["accepte"] and not any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
         supprimes = etats.get("supprimee", 0)
         termine = bool(visibles) and supprimes == len(visibles)
@@ -695,8 +714,8 @@ class Transhumance:
             "chemin": chemin, "fichiers": len(visibles), "etats": etats, "deja_la": deja, "visages": visages, "ecarts": ecarts,
             "inconnus": inconnus, "a_supprimer": len(pretes),
             "fichiers_inconnus": [l["rel"] for l in (self.base.tous("SELECT rel FROM inconnus ORDER BY rel LIMIT 300") if chemin in (".", "")
-                                  else self.base.tous("SELECT rel FROM inconnus WHERE dossier = ? OR dossier LIKE ? ORDER BY rel LIMIT 300",
-                                                      (chemin, chemin.replace("%", "") + "/%")))],
+                                  else self.base.tous("SELECT rel FROM inconnus WHERE dossier = ? OR substr(dossier, 1, ?) = ? ORDER BY rel LIMIT 300",
+                                                      (chemin, len(chemin) + 1, chemin + "/")))],
             "supprimable": bool(pretes) and not en_attente and not etats.get("vue") and not etats.get("envoyee"),
             "phrase": f"Terminé : les {supprimes} photos et vidéos de ce dossier sont dans le stockage d'Immich, et leurs originaux sont supprimés."
                       + (f" {inconnus} fichier(s) qu'Immich ne connaît pas sont restés dans le dossier." if inconnus else "")
@@ -746,23 +765,29 @@ class Transhumance:
                 copie = im.photo(l["nouveau_id"]) if l["nouveau_id"] else None
                 fichier = self._fichier(l["rel"])
                 # Dernière preuve, au moment de supprimer : la copie existe et le fichier n'a pas changé depuis l'envoi
+                # 0.7.1 : la copie doit être dans le stockage d'Immich (pas la bibliothèque externe) et différente de l'ancienne
                 if copie is None or copie.get("checksum") != l["empreinte"] or copie.get("isTrashed") \
+                        or copie.get("libraryId") or copie.get("isOffline") or l["nouveau_id"] == l["ancien_id"] \
                         or (fichier.is_file() and empreinte(fichier) != l["empreinte"]):
                     self._etat(l["ancien_id"], "ecart", ["copie_absente" if copie is None else "empreinte"])
                     gardes += 1
                     continue
                 if fichier.is_file():
-                    accompagnement = self._accompagnement(fichier)
+                    accompagnement = self._accompagnement_propre(fichier) if not l["deja_la"] else None
                     fichier.unlink()
-                    if accompagnement:
+                    if accompagnement:       # 0.7.1 : seulement s'il est à ce fichier seul et qu'Immich l'a reçu
                         accompagnement.unlink()
                 retires.append(l["ancien_id"])
                 self._etat(l["ancien_id"], "supprimee")
                 faits += 1
+        finally:
+            # 0.7.1 : le retrait des anciennes photos d'Immich se fait même si la boucle s'est arrêtée en route
             if retires:
                 self.suppression["etape"] = "immich"
-                im.retirer(retires)
-        finally:
+                try:
+                    im.retirer(retires)
+                except ErreurImmich as exc:
+                    self.base.noter("Retrait d'Immich à refaire", {"dossier": chemin, "photos": retires, "erreur": str(exc)[:300]})
             self.suppression = {**self.suppression, "en_cours": False}
             im.fermer()
             self.base.noter("Originaux supprimés", {"dossier": chemin, "supprimes": faits, "gardes": gardes})

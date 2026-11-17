@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.7.1 — 17 novembre 2026 (corrections de l'audit, suppression des originaux)
+- **Bug grave** : « Supprimer » sur un dossier dont le nom contient `_` prenait aussi les dossiers voisins (`Voyage_2019` prenait `Voyage 2019`, `VoyageX2019`, `voyage_2019` : `LIKE` traitait `_` comme un joker et ignorait la casse). Le dossier est maintenant choisi par préfixe exact, pour la suppression comme pour la liste des fichiers inconnus.
+- Le fichier `.xmp` n'est supprimé avec la photo que s'il est à elle seule (`IMG_1.jpg.xmp`, ou `IMG_1.xmp` sans autre `IMG_1.*` à côté) et si Immich l'a vraiment reçu (pas un doublon).
+- Si la suppression s'arrête en route (partage déconnecté, erreur), les anciennes photos déjà supprimées sont quand même retirées d'Immich ; un échec de ce retrait est noté au journal (« Retrait d'Immich à refaire »).
+- La partie vidéo d'une photo animée en écart bloque maintenant la suppression de la photo.
+- Dernière preuve au clic : la copie doit être dans le stockage d'Immich (ni bibliothèque externe, ni hors ligne) et différente de l'ancienne.
+- La page Connexion n'écrit plus de fichier d'essai dans le dossier des photos (même en lecture seule) pour savoir s'il est inscriptible.
+- Tests : 3 de plus. **Jamais essayé sur la vraie installation.**
+
 ## 0.7.0 — 16 novembre 2026
 
 - **Réglages dans l'appli.** Les dossiers jamais migrés se règlent maintenant dans l'écran Réglages (un dossier de premier niveau par ligne), à côté du passage automatique des demandes de Millésime. Au premier démarrage, Transhumance reprend une fois la valeur de l'ancienne variable `TRANSHUMANCE_EXCLUS` (une ligne au journal) ; ensuite la variable n'est plus lue.
