@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.7.4 — 18 novembre 2026 (révocation du cookie commun)
+- **« Se déconnecter » dans l'Anneau ferme vraiment la connexion commune** (audit du 17/11/2026, même correctif dans toutes les applis maison) : le cookie commun `maison_session` porte maintenant la génération tenue par l'Anneau (« génération.expiration.signature ») ; « Se déconnecter » l'augmente, et chaque appli la lit dans l'annuaire de l'Anneau (`/externe/services`, au plus une minute de retard) : un cookie commun d'avant la déconnexion ne vaut plus nulle part. Si l'Anneau ne répond pas, le cookie reste accepté comme avant (rien ne se bloque). **Toutes les applis doivent être à jour ensemble** ; une seule reconnexion est demandée après la mise à jour.
+- Module commun `maison.py` (socle 0.8.0) : `generation_commune()`, `definir_generation_commune()` ; l'annuaire lit aussi `generation_commune` (une ancienne réponse de l'Anneau, liste seule, reste lue).
+
 ## 0.7.3 — 17 novembre 2026 (corrections de l'audit, suite)
 - Un fichier refusé par Immich à l'envoi (abîmé, format refusé) ne bloque plus tout le lot à chaque relance : il passe en écart bloquant « refusé » et reste en place ; les fichiers suivants partent. Immich injoignable ou clé refusée arrêtent toujours le lot.
 
