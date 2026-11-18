@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   packages: write
 jobs:
   tests:
@@ -61,3 +61,12 @@ jobs:
           curl -fs http://127.0.0.1:8097/health
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8097/api/arbre)" = 401
           curl -fs http://127.0.0.1:8097/ | grep -q "Transhumance"
+      # R11 (audit du 17/11/2026) : étiquette Git de la version publiée, pour retrouver le code de chaque image
+      - name: Étiquette Git de version
+        if: github.ref == 'refs/heads/main'
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' app/__init__.py)
+          if [ -n "$version" ] && ! git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            git tag "v$version" "$GITHUB_SHA"
+            git push origin "v$version"
+          fi
