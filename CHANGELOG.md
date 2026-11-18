@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 0.8.0 — 18 novembre 2026 (santé des tâches de fond)
+- **Tâches suivies dans `/health`** (champ `taches`, socle 0.9.1) : `passage-auto` (régulière, 60 s : la boucle qui regarde chaque minute s'il y a une demande de Millésime à faire passer), `lot` (à la demande : un passage, par « Migrer » ou par une demande passée toute seule), `inventaire` (à la demande : « Relire » Immich et le dossier des photos), `copie-des-bases` (régulière, 86 400 s).
+- Le tour de la boucle automatique est le choix de la demande (rapide) ; le passage lui-même est suivi à part comme un `lot`, pour qu'un passage de plusieurs heures ne fasse pas croire à une boucle bloquée (`Transhumance.demande_suivante()` séparée de `passer_demande_suivante()`, qui fait toujours les deux). Un lot interrompu garde son erreur dans la tâche, montrée à l'écran comme avant, et passe le `lot` en « erreur » dans `/health`. Rien d'autre ne change.
+- **Copie de la base** chaque nuit à **01:50, heure de Paris** : `transhumance.db` copiée de façon cohérente (API de sauvegarde de SQLite, vérifiée) vers `/data/copies/transhumance-derniere.db`, écrasée chaque nuit (Hyper Backup tient l'historique) ; état dans `/health` (`copie_base`).
+- `/health` : champs ajoutés `version_socle`, `taches`, `copie_base` ; rien d'existant ne change. Les messages d'erreur des tâches n'y sont qu'avec le jeton commun (`Authorization: Bearer MAISON_JETON`) ou une session valide.
+- `maison.py` du socle 0.9.0. Un seul worker uvicorn (registre en mémoire).
+- Jamais essayé sur la vraie installation (ni la copie de nuit, ni sa remise en place).
+- Tests : 51 (3 nouveaux, `tests/test_sante.py` ; le test de `/health` de `test_reglages.py` suit les nouveaux champs).
+
 ## 0.7.6 — 18 novembre 2026 (constats moyens de l'audit)
 - **M32** : « Se déconnecter » vaut encore après un redémarrage : la génération des sessions est gardée dans `/data/session_generation` et relue au démarrage (comme l'Anneau). La page Connexion n'écrivait déjà plus rien dans le dossier des photos depuis la 0.7.1 (`os.access`) ; un test le vérifie maintenant. **Jamais essayé sur la vraie installation.**
 - `maison.py` du socle 0.8.2 (audit M3) : réglages secrets reconnus par mots, adresse avec identifiant écartée, champ `ecartes` dans la sauvegarde (noms seulement).

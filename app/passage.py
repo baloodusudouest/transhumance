@@ -306,6 +306,14 @@ class Transhumance:
         """Si le réglage est activé et qu'aucun lot ne tourne : fait passer la plus ancienne demande (envoi et
         contrôle, comme « Migrer »). Les originaux ne sont jamais supprimés ici : cela reste un clic, après le bilan.
         Rend le dossier passé, ou None. Une demande impossible (place) est marquée et n'est pas retentée."""
+        chemin = self.demande_suivante()
+        if chemin:
+            self.migrer([chemin])
+        return chemin
+
+    def demande_suivante(self) -> str | None:
+        """0.8.0 : la première moitié de passer_demande_suivante (le choix, rapide), séparée du passage (long) pour
+        que la boucle automatique et le lot soient suivis à part dans /health. Rend le dossier à faire passer, ou None."""
         if not self.auto_demandes() or self.tache.get("en_cours") or self.cfg.lecture_seule:
             return None
         demandes = self.base.lire("demandes", {})
@@ -320,7 +328,6 @@ class Transhumance:
                 self.base.noter("Passage automatique impossible", {"dossier": chemin, "raison": "place"})
                 continue
             self.base.noter("Passage automatique", {"dossier": chemin, "de": d.get("de")})
-            self.migrer([chemin])
             return chemin
         return None
 

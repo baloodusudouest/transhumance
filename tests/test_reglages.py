@@ -122,7 +122,9 @@ def test_sauvegarde_seulement_avec_le_jeton_commun(client, monkeypatch):
     texte = r.text
     for interdit in ("jeton-commun", MDP, t.cfg.immich_cle, t.cfg.racine_immich, str(t.cfg.photos), str(t.cfg.data)):
         assert interdit not in texte, interdit
-    assert client.get("/health").json() == {"ok": True, "version": main.__version__}   # inchangé
+    sante = client.get("/health").json()                                         # 0.8.0 : + santé des tâches
+    assert {k: sante[k] for k in ("ok", "version")} == {"ok": True, "version": main.__version__}   # inchangé
+    assert set(sante) == {"ok", "version", "version_socle", "taches", "copie_base"}
 
 
 def test_sauvegarde_n_emporte_ni_secret_ni_cle_exclue(client, monkeypatch):

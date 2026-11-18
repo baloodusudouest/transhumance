@@ -36,10 +36,18 @@ async def cycle(app: FastAPI):
     ETAT.setdefault("t", Transhumance(cfg, Base(cfg.data / "transhumance.db"), ETAT.get("transport")))
     # M32 (audit du 17/11/2026) : la génération des sessions est relue dans /data ; une déconnexion vaut après un redémarrage
     ETAT.setdefault("sessions", Sessions(APPLI, cfg.password, _lire_generation(cfg.data)))
+    # 0.8.0 : santé des tâches de fond (socle 0.9.0) — chaque boucle se déclare, chaque tour est suivi dans /health
+    maison.TACHES.declarer(TACHE_AUTO, periode_s=AUTO_S, type="reguliere")
+    maison.TACHES.declarer(TACHE_LOT, type="demande")
+    maison.TACHES.declarer(TACHE_INVENTAIRE, type="demande")
     # 0.4.0 : le passage automatique des dossiers demandés par Millésime (s'il est activé dans l'appli)
     if ETAT.get("boucle_auto", True):
         threading.Thread(target=_boucle_auto, daemon=True, name="auto").start()
+    # 0.8.0 : copie cohérente de la base chaque nuit (heure de Paris), dans <données>/copies
+    copie = asyncio.create_task(maison.planifier_copie(APPLI, [cfg.data / "transhumance.db"], cfg.data / "copies",
+                                                       maison.HEURES_COPIE[APPLI]))
     yield
+    copie.cancel()
 
 
 def _fichier_generation(data: Path) -> Path:
@@ -53,11 +61,38 @@ def _lire_generation(data: Path) -> int:
         return 0
 
 
+# 0.8.0 : noms des tâches suivies dans /health (taches, socle 0.9.0)
+TACHE_AUTO = "passage-auto"        # la boucle qui regarde chaque minute s'il y a une demande de Millésime à faire passer
+TACHE_LOT = "lot"                  # un passage (envoi et contrôle) : « Migrer » ou une demande passée toute seule
+TACHE_INVENTAIRE = "inventaire"    # « Relire » : Immich et le dossier des photos
+AUTO_S = 60                        # période de la boucle automatique (secondes)
+
+
+class _LotInterrompu(Exception):
+    """0.8.0 : le lot s'est arrêté en route (erreur déjà notée par migrer dans la tâche, montrée à l'écran)."""
+
+
+def _lot_suivi(dossiers: list[str] | None = None) -> None:
+    """Un lot, suivi dans /health. migrer garde pour lui l'erreur d'un lot interrompu (dans t().tache["erreur"]) :
+    elle est relancée ici pour que le tour compte comme raté. Rien d'autre ne change."""
+    with maison.TACHES.tour(TACHE_LOT):
+        t().migrer(dossiers)
+        if t().tache.get("erreur"):
+            raise _LotInterrompu(t().tache["erreur"])
+
+
 def _boucle_auto() -> None:
     while True:
-        time.sleep(60)
+        time.sleep(AUTO_S)
         try:
-            ETAT["t"].passer_demande_suivante()
+            # 0.8.0 : le choix (rapide) est le tour de la boucle ; le passage (long) est suivi à part, comme un lot :
+            # un passage de plusieurs heures ne fait pas croire à une boucle bloquée
+            with maison.TACHES.tour(TACHE_AUTO):
+                chemin = ETAT["t"].demande_suivante()
+            if chemin:
+                _lot_suivi([chemin])
+        except _LotInterrompu:
+            pass                  # comme avant : l'erreur est dans la tâche, montrée à l'écran, et déjà au journal
         except Exception as exc:  # noqa: BLE001 — l'erreur est dans la tâche, montrée à l'écran
             log.warning("Passage automatique interrompu : %s", exc)
 
@@ -119,8 +154,11 @@ def arbre_vu(request: Request) -> dict:
 
 
 @app.get("/health")
-def sante():
-    return {"ok": True, "version": __version__}
+def sante(request: Request):
+    # 0.8.0 : + version_socle, taches, copie_base (socle 0.9.0) ; messages d'erreur seulement avec le jeton commun
+    # ou une session valide
+    return {"ok": True, "version": __version__,
+            **maison.sante(request, jeton_commun=maison.jetons(), session_ok=ETAT["sessions"].connecte(request.cookies))}
 
 
 @app.get("/api/session")
@@ -166,7 +204,8 @@ def arbre(request: Request):
 @app.post("/api/inventaire")
 def inventaire(request: Request):
     """Relit Immich et le dossier des photos. N'écrit rien dans Immich ni dans le dossier."""
-    t().inventaire()
+    with maison.TACHES.tour(TACHE_INVENTAIRE):       # 0.8.0 : suivi dans /health (tâche à la demande)
+        t().inventaire()
     return arbre_vu(request)
 
 
@@ -332,7 +371,9 @@ def migrer():
 
     def faire():
         try:
-            tr.migrer()
+            _lot_suivi()                     # 0.8.0 : suivi dans /health (tâche à la demande « lot »)
+        except _LotInterrompu:
+            pass                             # comme avant : l'erreur est déjà dans tr.tache, montrée à l'écran
         except Exception as exc:  # noqa: BLE001 — l'erreur est montrée à l'écran
             tr.tache.update(en_cours=False, erreur=str(exc))
     threading.Thread(target=faire, daemon=True, name="lot").start()
