@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.7.6 — 18 novembre 2026 (constats moyens de l'audit)
+- **M32** : « Se déconnecter » vaut encore après un redémarrage : la génération des sessions est gardée dans `/data/session_generation` et relue au démarrage (comme l'Anneau). La page Connexion n'écrivait déjà plus rien dans le dossier des photos depuis la 0.7.1 (`os.access`) ; un test le vérifie maintenant. **Jamais essayé sur la vraie installation.**
+- `maison.py` du socle 0.8.2 (audit M3) : réglages secrets reconnus par mots, adresse avec identifiant écartée, champ `ecartes` dans la sauvegarde (noms seulement).
+
 ## 0.7.5 — 18 novembre 2026 (cookies Secure)
 - **Cookies `Secure` en https** (audit du 17/11/2026, même correctif dans toutes les applis maison) : ouverte en https (directement, derrière Tailscale Serve qui le dit par `X-Forwarded-Proto`, ou d'après l'origine de la page), l'appli pose ses cookies de session avec l'attribut `Secure` : ils ne partent jamais en clair. En http (adresse locale), rien ne change.
 

@@ -12,6 +12,7 @@ import re
 import time
 import urllib.error
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -33,11 +34,23 @@ async def cycle(app: FastAPI):
     cfg = ETAT.get("cfg") or charger()
     ETAT.setdefault("cfg", cfg)
     ETAT.setdefault("t", Transhumance(cfg, Base(cfg.data / "transhumance.db"), ETAT.get("transport")))
-    ETAT.setdefault("sessions", Sessions(APPLI, cfg.password))
+    # M32 (audit du 17/11/2026) : la génération des sessions est relue dans /data ; une déconnexion vaut après un redémarrage
+    ETAT.setdefault("sessions", Sessions(APPLI, cfg.password, _lire_generation(cfg.data)))
     # 0.4.0 : le passage automatique des dossiers demandés par Millésime (s'il est activé dans l'appli)
     if ETAT.get("boucle_auto", True):
         threading.Thread(target=_boucle_auto, daemon=True, name="auto").start()
     yield
+
+
+def _fichier_generation(data: Path) -> Path:
+    return data / "session_generation"
+
+
+def _lire_generation(data: Path) -> int:
+    try:
+        return int(_fichier_generation(data).read_text().strip())
+    except (OSError, ValueError):
+        return 0
 
 
 def _boucle_auto() -> None:
@@ -133,6 +146,10 @@ async def connexion(request: Request, corps: dict = Body(...)):
 def deconnexion():
     s = ETAT["sessions"]
     s.generation += 1
+    try:
+        _fichier_generation(ETAT["cfg"].data).write_text(str(s.generation))   # M32 : gardée pour le prochain démarrage
+    except OSError as exc:
+        log.warning("Génération des sessions non gardée : %s", exc)
     r = JSONResponse({"ok": True})
     r.delete_cookie(s.cookie)
     r.delete_cookie(COMMUN)      # « Se déconnecter » ferme aussi la connexion commune

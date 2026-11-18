@@ -670,3 +670,25 @@ def test_073_un_fichier_refuse_ne_bloque_pas_le_lot(monde):
     e = etats(t)
     assert e["IMG_0001.jpg"] == "ecart" and e["IMG_0002.jpg"] == "prete" and e["IMG_0003.jpg"] == "prete"
     assert not t.bilan("Pellicule/2020")["supprimable"]          # l'écart « refusé » est bloquant
+
+
+def test_m32_deconnexion_gardee_apres_redemarrage_et_connexions_n_ecrit_rien(client):
+    """M32 (audit du 17/11/2026) : « Se déconnecter » vaut encore après un redémarrage (génération gardée dans /data) ;
+    la page Connexion n'écrit rien dans le dossier des photos (déjà fait en 0.7.1)."""
+    t, im, ids, photos = client.monde
+    avant = sorted(p.relative_to(photos) for p in photos.rglob("*"))
+    assert client.post("/api/connexion", json={"mot_de_passe": MDP}).status_code == 200
+    vieux = client.cookies.get("transhumance_session")
+    assert client.get("/api/connexions").status_code == 200
+    assert sorted(p.relative_to(photos) for p in photos.rglob("*")) == avant                # rien d'écrit chez les photos
+    assert client.post("/api/deconnexion").status_code == 200
+    assert (t.cfg.data / "session_generation").read_text() == "1"
+    # Redémarrage : nouvelles sessions, lues dans /data ; le cookie d'avant la déconnexion ne vaut plus
+    main.ETAT.clear()
+    main.ETAT.update(cfg=t.cfg, t=t)
+    with TestClient(main.app) as c:
+        assert main.ETAT["sessions"].generation == 1
+        c.cookies.set("transhumance_session", vieux)
+        assert c.get("/api/arbre").status_code == 401
+        main.ETAT["sessions"].generation = 0                                                 # contre-épreuve : le cookie est bien lu
+        assert c.get("/api/arbre").status_code == 200
