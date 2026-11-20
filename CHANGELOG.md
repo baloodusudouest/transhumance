@@ -1,5 +1,17 @@
 # Journal des versions
 
+## 0.9.0 — 20 novembre 2026 (fiches « Connexion » communes, contrat 3)
+- L'écran « Connexion » passe à l'écran commun des applis maison (socle 0.11.0, `$lib/services/`) : deux fiches dépliées, **Immich** et **PC de calcul (reconnaissance d'Immich)**. « Vérifier » ne teste que son service ; l'âge du dernier essai est affiché. Textes « lu » et « écrit » repris de l'ancien écran.
+- Serveur : registre `SERVICES` (`maison.Services`) et `GET /api/maison/services`, `POST /api/maison/services/{id}/verifier` (session ou `ANNEAU_CLE`, au plus un essai toutes les 30 s, rien d'écrit, permis en lecture seule). La fiche « État » de l'Anneau les lit.
+  - `immich` : essai = version et place libre (`GET /server/version`, `GET /server/storage`). Aucun geste : « Migrer » et « Supprimer » restent dans l'écran Migrer.
+  - `pc-calcul` : essai = la lecture de la reconnaissance (réglages d'apprentissage d'Immich, files, un `/ping` de chaque adresse ; ne réveille pas le PC). Voyant vert seulement si le PC fait la reconnaissance (comme l'ancien point). **Guide** : réglages lus (adresses déclarées dans Immich et leur état, files de reconnaissance, tirés du dernier essai), Allumer normalement, En cas de problème (commandes PowerShell), Installation (une seule fois). La lecture de l'écran Migrer (`/api/reconnaissance`, toutes les 10 s) sert aussi d'essai ; `/api/connexions` note aussi Immich.
+- Le **dossier des photos** n'est pas un service : sa carte passe dans **Réglages** (mêmes textes). Le détail de la reconnaissance (adresses, files) passe dans le guide de la fiche « PC de calcul » ; `Reconnaissance.svelte` ne garde que la ligne courte de Migrer. `pages/Services.svelte` est retiré.
+- `maison.py` du socle 0.11.0 (contrat 3). Nouvelle variable facultative `ANNEAU_CLE` (docker-compose.yml).
+- `/api/connexions` reste (Réglages y lit le journal et le dossier des photos) : sa partie `immich` n'est plus lue par l'interface, **à retirer en 0.10.0**.
+- Aucune route qui écrit n'a changé.
+- Tests : `tests/test_fiches_connexion.py` (forme du contrat 3, accès, Vérifier sans écriture en lecture seule, guide du PC, lecture de Migrer comme essai) ; contrat 3 et socle 0.11.0 dans `test_passage.py` et `test_sante.py` ; tests d'écran 4 et 5 adaptés au nouvel écran. 57 tests serveur et 7 tests d'écran passent.
+- **Jamais essayé sur la vraie installation.** Le guide du PC reprend l'en-tête de `pc/immich-ml.yml` (Docker Desktop, conteneur `immich_ml_pc`, port 3003, adresse au-dessus de celle du NAS dans Immich) ; ses commandes PowerShell (pare-feu, `Test-NetConnection`) n'ont jamais été essayées.
+
 ## 0.8.0 — 18 novembre 2026 (santé des tâches de fond)
 - **Tâches suivies dans `/health`** (champ `taches`, socle 0.9.1) : `passage-auto` (régulière, 60 s : la boucle qui regarde chaque minute s'il y a une demande de Millésime à faire passer), `lot` (à la demande : un passage, par « Migrer » ou par une demande passée toute seule), `inventaire` (à la demande : « Relire » Immich et le dossier des photos), `copie-des-bases` (régulière, 86 400 s).
 - Le tour de la boucle automatique est le choix de la demande (rapide) ; le passage lui-même est suivi à part comme un `lot`, pour qu'un passage de plusieurs heures ne fasse pas croire à une boucle bloquée (`Transhumance.demande_suivante()` séparée de `passer_demande_suivante()`, qui fait toujours les deux). Un lot interrompu garde son erreur dans la tâche, montrée à l'écran comme avant, et passe le `lot` en « erreur » dans `/health`. Rien d'autre ne change.

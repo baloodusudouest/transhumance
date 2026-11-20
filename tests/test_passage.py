@@ -513,7 +513,7 @@ def _charger(monkeypatch, **variables):
 
 def test_070_copie_du_module_commun_non_retouchee():
     from app import maison
-    assert maison.CONTRAT == 2 and maison.CONTRAT_SAUVEGARDE == 1 and maison.empreinte_ecrite()
+    assert maison.CONTRAT == 3 and maison.CONTRAT_SAUVEGARDE == 1 and maison.empreinte_ecrite()
     assert maison.empreinte_calculee() == maison.empreinte_ecrite()
 
 

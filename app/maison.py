@@ -1,5 +1,6 @@
-"""Module commun des applis maison — contrat 2 (16/11/2026 ; contrat 1 : variables communes, contrat 2 : réglages et sauvegarde),
-socle 0.9.0 (18/11/2026 : santé des tâches de fond et copie cohérente des bases, voir VERSION_SOCLE).
+"""Module commun des applis maison — contrat 3 (20/11/2026 ; contrat 1 : variables communes, contrat 2 : réglages et
+sauvegarde, contrat 3 : fiches « Connexion » communes, /api/maison/services), socle 0.11.0 (voir VERSION_SOCLE ;
+0.11.0 : guide facultatif d'une fiche — réglages lus, « Allumer normalement », « En cas de problème », installation).
 
 Fichier de référence : baloodusudouest/socle, app/maison.py. Il est copié TEL QUEL dans chaque appli
 (tools/diffuser_maison.py) ; ne jamais le modifier ailleurs que dans le socle. La dernière ligne porte une
@@ -12,6 +13,8 @@ Variables communes de la stack (aucune valeur dans le code) :
   MAISON_LECTURE_SEULE   « oui » : aucune appli n'écrit chez un service extérieur ; la variable propre à une appli,
                          si elle est posée (« oui » ou « non »), l'emporte pour cette appli
   MAISON_ANNEAU_URL      adresse de l'Anneau dans la stack (défaut http://anneau:8094), pour l'annuaire et les sauvegardes
+  ANNEAU_CLE             clé de lecture de l'Anneau (contrat 3) : n'ouvre QUE /api/maison/services et son « Vérifier » ;
+                         vide = l'Anneau ne lit pas les fiches. Se change seule, sans toucher MAISON_JETON.
 
 Sauvegarde des réglages (contrat de sauvegarde 1) : chaque appli garde ses réglages d'usage (classe Reglages, ou sa
 propre table) et les rend par GET /externe/sauvegarde (jeton commun) avec sauvegarde(...) ; l'Anneau les collecte
@@ -27,7 +30,16 @@ UN SEUL WORKER UVICORN : le registre et la dernière copie vivent en mémoire du
 chacun aurait le sien et /health dirait n'importe quoi). Le registre repart à vide au démarrage ; la dernière copie
 est relue dans <dossier>/copie.json.
 
-Bibliothèque standard seulement : aucune dépendance ajoutée aux applis.
+Fiches « Connexion » (contrat 3, 0.10.0) : chaque appli déclare ses services extérieurs dans un registre Services
+(ajouter(...) : ce qui est lu, ce qui est écrit, la variable qui le relie, un essai LÉGER sans écriture ni coût) et
+appelle monter_services(app, registre, session_ok) : GET /api/maison/services (dernier essai et son âge, aucun essai
+lancé) et POST /api/maison/services/{id}/verifier (un essai, au plus un toutes les 30 s par service). Accès : la session
+de l'appli, ou ANNEAU_CLE. Le détail affiché est nettoyé (aucune adresse, aucune clé, 160 caractères au plus).
+L'interface commune est frontend/src/lib/services/ (FicheService.svelte, Services.svelte), recopiée et signée comme
+ce fichier (tools/diffuser_maison.py).
+
+Bibliothèque standard seulement : aucune dépendance ajoutée aux applis (monter_services importe Starlette au moment
+de l'appel, là où l'appli est une appli FastAPI).
 """
 from __future__ import annotations
 
@@ -48,8 +60,8 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-CONTRAT = 2
-VERSION_SOCLE = "0.9.1"      # version du socle d'où vient ce fichier (publiée dans /health : version_socle)
+CONTRAT = 3
+VERSION_SOCLE = "0.11.0"      # version du socle d'où vient ce fichier (publiée dans /health : version_socle)
 VRAI = {"oui", "1", "true", "yes", "vrai"}
 FAUX = {"non", "0", "false", "no", "faux"}
 
@@ -814,6 +826,278 @@ def sante(request=None, jeton_commun=None, session_ok: bool = False) -> dict:
             "copie_base": copie_base_etat()}
 
 
+# ---------------------------------------------------------------- fiches « Connexion » (contrat 3, 0.10.0)
+
+ETATS_SERVICE = ("repond", "ne_repond_pas", "relie", "pas_relie")
+GENRES_SERVICE = ("exterieur", "maison")
+DELAI_VERIFIER_S = 30          # au plus un essai par service toutes les 30 s ; avant, le dernier résultat revient
+DUREE_ESSAI_S = 8              # un essai plus long est arrêté et compte « ne répond pas »
+_ADRESSE = re.compile(r"\b(?:https?|wss?|ftp)://\S+", re.I)
+_HOTE_PORT = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b|\b[\w-]+(?:\.[\w-]+)+:\d{2,5}\b")
+_ID_SERVICE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+
+
+def cle_anneau() -> str:
+    """ANNEAU_CLE (vide : l'Anneau ne lit pas les fiches)."""
+    return _env("ANNEAU_CLE")
+
+
+def cle_anneau_valide(entetes) -> bool:
+    """Vrai si la requête porte ANNEAU_CLE (Authorization: Bearer …), comparée en temps constant."""
+    c = cle_anneau()
+    return bool(c) and jeton_valide(jeton_propose(entetes), (c,))
+
+
+def nettoyer_detail(texte) -> str | None:
+    """Phrase montrée sous une fiche : secrets masqués, adresses et hôtes retirés, une ligne, 160 caractères au plus."""
+    if texte is None:
+        return None
+    t = masquer_secrets(str(texte)).strip().splitlines()
+    t = t[0].strip() if t else ""
+    t = _HOTE_PORT.sub("…", _ADRESSE.sub("…", t))
+    if not t:
+        return None
+    return t if len(t) <= LONGUEUR_MESSAGE else t[:LONGUEUR_MESSAGE - 1] + "…"
+
+
+def _textes(v, n: int = 30, long: int = 600) -> list[str]:
+    return [str(x)[:long] for x in (v if isinstance(v, list) else [])[:n] if isinstance(x, (str, int, float))]
+
+
+def nettoyer_guide(g) -> dict | None:
+    """Guide d'une fiche (0.11.0) relu champ par champ : clés connues, textes bornés, secrets masqués. None si vide."""
+    if not isinstance(g, dict):
+        return None
+    m = masquer_secrets
+    sortie = {
+        "reglages": [{"nom": m(str(r.get("nom", "")))[:80], "valeur": m(str(r.get("valeur", "")))[:300]}
+                     for r in (g.get("reglages") or [])[:20] if isinstance(r, dict) and r.get("nom")],
+        "allumer": [m(x) for x in _textes(g.get("allumer"))],
+        "pannes": [{"signe": m(str(p.get("signe", "")))[:200], "faire": [m(x) for x in _textes(p.get("faire"), 12)],
+                    "commandes": [m(x) for x in _textes(p.get("commandes"), 8, 400)]}
+                   for p in (g.get("pannes") or [])[:20] if isinstance(p, dict) and p.get("signe")],
+        "une_fois": [{"texte": m(str(u.get("texte", "")))[:600], "commande": m(str(u.get("commande", "") or ""))[:400]}
+                     for u in (g.get("une_fois") or [])[:20] if isinstance(u, dict) and u.get("texte")],
+        "terminal": m(str(g.get("terminal") or ""))[:200],
+        "note": m(str(g.get("note") or ""))[:600],
+    }
+    return sortie if any(sortie.values()) else None
+
+
+def _valeur(v):
+    return v() if callable(v) else v
+
+
+class Services:
+    """Registre des services extérieurs d'une appli (fiches « Connexion », contrat 3).
+
+    ajouter(id, nom, lit=, ecrit=, regle=, essai=, reglage=, genre=, cible=, geste=, derniere_ecriture=)
+      id                 identifiant commun (liste du coffre : immich, carnet, home-assistant, icloud…)
+      lit, ecrit         phrases montrées telles quelles (« Rien. » si rien n'est écrit)
+      regle              booléen ou fonction : le service est-il réglé dans la stack ?
+      essai              fonction (ou coroutine) LÉGÈRE : lit une version, un état ; n'écrit rien, ne coûte rien,
+                         ne réveille rien. Rend True/False, (bool, phrase), ou lève une exception (= ne répond pas).
+      reglage            nom de la variable de la stack qui le relie (montré quand il n'est pas réglé)
+      genre              « exterieur » ou « maison » (une autre appli maison ; cible = sa clé)
+      geste              {"id", "nom"} : au plus un geste qui écrit (Synchroniser, Livrer…), porté par l'appli
+      derniere_ecriture  fonction rendant une date ISO (ou None) : dernière écriture de l'appli chez ce service
+      guide              (0.11.0) dict ou fonction rendant un dict, pour un service qu'on allume et répare soi-même
+                         (PC de calcul, IA du PC) : {"reglages": [{"nom", "valeur"}], "allumer": [phrase],
+                         "pannes": [{"signe", "faire": [phrase], "commandes": [ligne]}], "une_fois": [{"texte", "commande"}],
+                         "terminal": phrase (où taper les commandes), "note": phrase}. Tout est facultatif ; rien de
+                         secret (le guide s'affiche aussi dans l'Anneau).
+    """
+
+    def __init__(self, appli: str, simule: bool = False, delai_s: float = DELAI_VERIFIER_S,
+                 duree_essai_s: float = DUREE_ESSAI_S):
+        self.appli = appli
+        self.simule = simule
+        self.delai_s = delai_s
+        self.duree_essai_s = duree_essai_s
+        self._ordre: list[str] = []
+        self._def: dict[str, dict] = {}
+        self._dernier: dict[str, dict] = {}
+        self._verrou = threading.Lock()
+
+    def ajouter(self, id: str, nom: str, *, lit: str, ecrit: str, regle=True, essai=None, reglage: str | None = None,
+                genre: str = "exterieur", cible: str | None = None, geste: dict | None = None,
+                derniere_ecriture=None, guide=None) -> "Services":
+        if not _ID_SERVICE.match(id or ""):
+            raise ValueError(f"identifiant de service invalide : {id!r}")
+        if id in self._def:
+            raise ValueError(f"service déjà déclaré : {id}")
+        if genre not in GENRES_SERVICE:
+            raise ValueError(f"genre inconnu : {genre!r}")
+        if geste is not None and not (isinstance(geste, dict) and geste.get("id") and geste.get("nom")):
+            raise ValueError("geste attendu sous la forme {'id': …, 'nom': …}")
+        self._ordre.append(id)
+        self._def[id] = {"id": id, "nom": nom, "lit": lit, "ecrit": ecrit or "Rien.", "regle": regle, "essai": essai,
+                         "reglage": reglage, "genre": genre, "cible": cible, "geste": geste,
+                         "derniere_ecriture": derniere_ecriture, "guide": guide}
+        return self
+
+    def ids(self) -> list[str]:
+        return list(self._ordre)
+
+    def _fiche(self, id: str) -> dict:
+        d = self._def[id]
+        try:
+            regle = bool(_valeur(d["regle"]))
+        except Exception:                                 # noqa: BLE001 — un réglage illisible = pas relié
+            regle = False
+        dernier = self._dernier.get(id) or {}
+        if not regle:
+            etat = "pas_relie"
+        elif dernier:
+            etat = "repond" if dernier.get("ok") else "ne_repond_pas"
+        else:
+            etat = "relie"
+        try:
+            ecriture = _valeur(d["derniere_ecriture"]) if d["derniere_ecriture"] is not None else None
+        except Exception:                                 # noqa: BLE001
+            ecriture = None
+        try:
+            guide = nettoyer_guide(_valeur(d["guide"])) if d["guide"] is not None else None
+        except Exception:                                 # noqa: BLE001 — un guide illisible n'empêche pas la fiche
+            guide = None
+        return {"id": id, "nom": d["nom"], "genre": d["genre"], "cible": d["cible"], "etat": etat,
+                "lit": d["lit"], "ecrit": d["ecrit"], "reglage": d["reglage"] if not regle else None,
+                "detail": dernier.get("detail") if regle else None,
+                "verifie_le": dernier.get("le") if regle else None,
+                "derniere_ecriture": ecriture if isinstance(ecriture, str) else None,
+                "gestes": [dict(d["geste"])] if d["geste"] else [], "guide": guide}
+
+    def liste(self) -> dict:
+        """Réponse de GET /api/maison/services : aucun essai lancé, le dernier résultat et son âge."""
+        return {"contrat": CONTRAT, "appli": self.appli, "simule": self.simule,
+                "services": [self._fiche(i) for i in self._ordre]}
+
+    def _noter(self, id: str, ok: bool, detail) -> None:
+        self._dernier[id] = {"ok": bool(ok), "detail": nettoyer_detail(detail),
+                             "le": datetime.now().astimezone().isoformat(timespec="seconds"), "t": time.monotonic()}
+
+    def _recent(self, id: str) -> bool:
+        d = self._dernier.get(id)
+        return bool(d) and time.monotonic() - d["t"] < self.delai_s
+
+    @staticmethod
+    def _lire_resultat(r) -> tuple[bool, str | None]:
+        if isinstance(r, tuple):
+            return bool(r[0]), (r[1] if len(r) > 1 else None)
+        if isinstance(r, dict):
+            return bool(r.get("ok")), r.get("detail")
+        return bool(r), None
+
+    def verifier(self, id: str) -> dict:
+        """Un essai (synchrone). Inconnu : KeyError. Pas relié : la fiche telle quelle, sans essai."""
+        if id not in self._def:
+            raise KeyError(id)
+        d = self._def[id]
+        with self._verrou:
+            if self._recent(id) or self._fiche(id)["etat"] == "pas_relie" or d["essai"] is None:
+                return self._fiche(id)
+        try:
+            r = d["essai"]()
+            if asyncio.iscoroutine(r):
+                r = asyncio.run(asyncio.wait_for(r, self.duree_essai_s))
+            ok, detail = self._lire_resultat(r)
+        except Exception as exc:                          # noqa: BLE001 — l'essai a échoué : « ne répond pas »
+            ok, detail = False, message_erreur(exc)
+        self._noter(id, ok, detail)
+        return self._fiche(id)
+
+    async def verifier_async(self, id: str) -> dict:
+        """Un essai depuis une route asynchrone : une coroutine est attendue, une fonction tourne à part."""
+        if id not in self._def:
+            raise KeyError(id)
+        d = self._def[id]
+        with self._verrou:
+            if self._recent(id) or self._fiche(id)["etat"] == "pas_relie" or d["essai"] is None:
+                return self._fiche(id)
+        try:
+            if asyncio.iscoroutinefunction(d["essai"]):
+                r = await asyncio.wait_for(d["essai"](), self.duree_essai_s)
+            else:
+                r = await asyncio.wait_for(asyncio.to_thread(d["essai"]), self.duree_essai_s)
+                if asyncio.iscoroutine(r):
+                    r = await asyncio.wait_for(r, self.duree_essai_s)
+            ok, detail = self._lire_resultat(r)
+        except asyncio.TimeoutError:
+            ok, detail = False, f"Pas de réponse en {int(self.duree_essai_s)} s."
+        except Exception as exc:                          # noqa: BLE001
+            ok, detail = False, message_erreur(exc)
+        self._noter(id, ok, detail)
+        return self._fiche(id)
+
+    def noter(self, id: str, ok: bool, detail=None) -> None:
+        """Pour un geste de l'appli (Synchroniser…) qui vient de joindre le service : son résultat sert d'essai."""
+        if id in self._def:
+            self._noter(id, ok, detail)
+
+
+def adresse_anneau() -> str:
+    """Adresse de l'Anneau dans la stack (MAISON_ANNEAU_URL, défaut http://anneau:8094)."""
+    return (_env("MAISON_ANNEAU_URL") or "http://anneau:8094").rstrip("/")
+
+
+def essai_http(url: str, chemin: str = "/health", jeton: str | None = None, duree: float = 5.0,
+               entetes: dict | None = None) -> tuple[bool, str]:
+    """Essai léger commun : un GET court (par défaut /health), rien d'écrit. (True, « Version x. ») si 2xx ;
+    une erreur réseau ou HTTP lève une exception (le registre la note « ne répond pas », message nettoyé)."""
+    if not url:
+        raise ValueError("adresse absente")
+    tetes = {"User-Agent": "maison", "Accept": "application/json", **(entetes or {})}
+    if jeton:
+        tetes["Authorization"] = f"Bearer {jeton}"
+    req = urllib.request.Request(url.rstrip("/") + chemin, headers=tetes)
+    with urllib.request.urlopen(req, timeout=duree) as r:    # noqa: S310 — adresse de la stack
+        statut = r.status
+        corps = r.read(65536)
+    version = None
+    try:
+        donnees = json.loads(corps or b"null")
+        if isinstance(donnees, dict):
+            version = donnees.get("version") or donnees.get("version_socle")
+    except ValueError:
+        pass
+    return 200 <= statut < 300, (f"Version {version}." if isinstance(version, str) and version else None)
+
+
+CHEMIN_SERVICES = "/api/maison/services"
+
+
+def monter_services(app, registre: Services, session_ok) -> None:
+    """Branche les deux routes du contrat 3 sur une appli FastAPI/Starlette, AVANT sa propre garde : à appeler
+    après les autres @app.middleware (le dernier ajouté passe en premier). session_ok(request) -> bool.
+    Accès : session de l'appli, ou ANNEAU_CLE ; rien d'autre (MAISON_JETON n'ouvre pas les fiches)."""
+    from starlette.responses import JSONResponse     # import local : maison.py reste sans dépendance
+
+    def _reponse(corps, statut: int = 200):
+        r = JSONResponse(corps, status_code=statut)
+        r.headers["Cache-Control"] = "no-store"
+        return r
+
+    @app.middleware("http")
+    async def _services_maison(request, appel):
+        chemin = request.url.path.rstrip("/")
+        if chemin != CHEMIN_SERVICES and not chemin.startswith(CHEMIN_SERVICES + "/"):
+            return await appel(request)
+        try:
+            permis = cle_anneau_valide(request.headers) or bool(session_ok(request))
+        except Exception:                                 # noqa: BLE001 — garde illisible : refus
+            permis = False
+        if not permis:
+            return _reponse({"detail": "Connexion nécessaire."}, 401)
+        reste = chemin[len(CHEMIN_SERVICES):].strip("/").split("/") if chemin != CHEMIN_SERVICES else []
+        if not reste and request.method == "GET":
+            return _reponse(registre.liste())
+        if len(reste) == 2 and reste[1] == "verifier" and request.method == "POST":
+            try:
+                return _reponse(await registre.verifier_async(reste[0]))
+            except KeyError:
+                return _reponse({"detail": "Service inconnu."}, 404)
+        return _reponse({"detail": "Not Found"}, 404)
+
 # ---------------------------------------------------------------- empreinte (copie non retouchée)
 
 def empreinte_calculee(chemin: str | Path | None = None) -> str:
@@ -825,4 +1109,17 @@ def empreinte_calculee(chemin: str | Path | None = None) -> str:
 def empreinte_ecrite(chemin: str | Path | None = None) -> str:
     texte = Path(chemin or __file__).read_text(encoding="utf-8")
     return texte.rsplit("\n# empreinte: ", 1)[-1].strip() if "\n# empreinte: " in texte else ""
-# empreinte: 8e043b183229aa14
+
+
+MARQUE_INTERFACE = "\n<!-- empreinte: "          # fichiers communs de l'interface (frontend/src/lib/services/*.svelte)
+FICHIERS_INTERFACE = ("FicheService.svelte", "Services.svelte")
+
+
+def empreinte_interface(chemin: str | Path) -> tuple[str, str]:
+    """(écrite, calculée) pour un fichier commun de l'interface : égales si la copie n'a pas été retouchée."""
+    texte = Path(chemin).read_text(encoding="utf-8")
+    if MARQUE_INTERFACE not in texte:
+        return "", hashlib.sha256(texte.rstrip("\n").encode("utf-8")).hexdigest()[:16]
+    corps, fin = texte.rsplit(MARQUE_INTERFACE, 1)
+    return fin.replace("-->", "").strip(), hashlib.sha256(corps.rstrip("\n").encode("utf-8")).hexdigest()[:16]
+# empreinte: d1a04ca3d55fe032

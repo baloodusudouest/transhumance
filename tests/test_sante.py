@@ -24,7 +24,7 @@ def test_health_porte_la_sante_des_taches_et_la_copie(client, monkeypatch):  # n
     monkeypatch.setenv("MAISON_JETON", "jeton-commun-essai")
     j = _sante(client)
     assert j["ok"] is True and j["version"] == main.__version__                  # rien d'existant ne change
-    assert j["version_socle"] == "0.9.1"
+    assert j["version_socle"] == "0.11.0"
     taches = {t["nom"]: t for t in j["taches"]}
     assert {"passage-auto", "lot", "inventaire", "copie-des-bases"} <= set(taches)
     assert taches["passage-auto"]["type"] == "reguliere" and taches["passage-auto"]["periode_s"] == 60

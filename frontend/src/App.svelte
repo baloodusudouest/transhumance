@@ -9,7 +9,7 @@
   import { api } from '$lib/api.js'
   import Connexion from './pages/Connexion.svelte'
   import Migrer from './pages/Migrer.svelte'
-  import Services from './pages/Services.svelte'
+  import Services from '$lib/services/Services.svelte'   // 0.9.0 : écran commun (contrat 3, socle 0.11.0)
   import Reglages from './pages/Reglages.svelte'
 
   const onglets = [
@@ -63,7 +63,7 @@
       {#key page}
         <div in:fly={{ y: 6, duration: 180 }}>
           {#if page === 'connexion'}
-            <Services ondeconnecte={() => (connecte = false)} />
+            <Services etiquette="Transhumance" lectureSeule={session.lecture_seule} ondeconnecte={() => (connecte = false)} />
           {:else if page === 'reglages'}
             <Reglages {session} {deconnecter} ondeconnecte={() => (connecte = false)} />
           {:else}

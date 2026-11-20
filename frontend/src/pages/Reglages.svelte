@@ -78,6 +78,19 @@
   </p>
 </section>
 
+<!-- 0.9.0 : le dossier des photos n'est pas un service (fiches « Connexion » communes) : il passe ici, textes repris tels quels -->
+<section class="mt-4 rounded-2xl border bg-card p-5" aria-label="Dossier des photos">
+  <h2 class="flex items-center justify-between text-lg font-semibold">Dossier des photos
+    {#if d}<span class="size-2.5 rounded-full {d.dossier.lisible && d.dossier.inscriptible ? 'bg-valide' : 'bg-muted-foreground/40'}" aria-hidden="true"></span>{/if}</h2>
+  {#if d}
+    <p class="mt-1 text-sm">{d.dossier.lisible ? 'lisible' : 'illisible'} · {d.dossier.inscriptible ? 'écriture possible (nécessaire pour supprimer)' : 'écriture refusée : rien ne pourra être supprimé'}</p>
+    <p class="mt-2 text-sm text-muted-foreground">Transhumance n'y écrit rien : elle y supprime seulement, sur ton clic, les fichiers prouvés copiés.
+      {d.dossier.exclus.length ? `Jamais migrés : ${d.dossier.exclus.join(', ')}.` : ''}</p>
+  {:else}
+    <p class="mt-1 text-sm text-muted-foreground">{message || 'Lecture…'}</p>
+  {/if}
+</section>
+
 <div class="mt-4 grid gap-4 md:grid-cols-2">
   <section class="min-w-0 rounded-2xl border bg-card p-5" aria-label="Réglages">
     <h2 class="text-lg font-semibold">Réglages</h2>

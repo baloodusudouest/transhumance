@@ -119,24 +119,35 @@ def test_3_le_bilan_puis_le_clic(page, monde):
 
 
 def test_4_la_reconnaissance_dit_qui_travaille(page):
+    """0.9.0 : la ligne courte reste dans Migrer ; le détail (adresses, files) est dans la fiche « PC de calcul »
+    de l'écran Connexion commun, après Vérifier (guide, Réglages lus)."""
     assert "reconnaissance" in page.locator("#reconnaissance-courte").inner_text().lower()
     page.get_by_role("link", name="Connexion").click()
-    bloc = page.get_by_role("region", name="Reconnaissance d'Immich")
-    bloc.get_by_role("list", name="Adresses essayées par Immich").wait_for()
-    texte = bloc.inner_text()
+    page.get_by_role("heading", level=1, name="Connexion").wait_for()
+    fiche = page.get_by_role("article", name="PC de calcul (reconnaissance d'Immich)")
+    fiche.get_by_role("button", name="Vérifier").click()
+    fiche.get_by_text("Ne répond pas", exact=True).wait_for()               # adresses inventées : personne ne répond
+    texte = fiche.inner_text()
     assert "1. PC" in texte and "2. NAS" in texte and "Lecture du texte (OCR)" in texte
-    assert "ne répond pas" in texte                                   # adresses inventées : personne ne répond
+    assert "ne répond pas" in texte and "Allumer normalement" in texte
+    immich = page.get_by_role("article", name="Immich", exact=True)
+    assert "Ne mets pas Immich à jour pendant la migration." in immich.inner_text()
+    immich.get_by_role("button", name="Vérifier").click()
+    immich.get_by_text(re.compile(r"Version 3\.4\.1 · ")).wait_for()
 
 
 def test_5_reglages_journal_version_deconnexion(page):
-    """0.5.0 (format commun) : Réglages porte l'écriture, le journal, la version et la déconnexion ; Connexion ne garde que les services."""
+    """0.5.0 (format commun) : Réglages porte l'écriture, le journal, la version et la déconnexion ; Connexion ne garde que les services.
+    0.9.0 : le dossier des photos passe dans Réglages (ce n'est pas un service)."""
     page.get_by_role("link", name="Réglages").click()
     page.get_by_role("heading", level=1, name="Réglages").wait_for()
     page.get_by_role("region", name="Journal").wait_for()
     assert page.get_by_text(re.compile(r"^Transhumance \d+\.\d+\.\d+$")).count() == 1
     assert page.get_by_role("button", name="Se déconnecter").count() == 1
+    page.get_by_role("region", name="Dossier des photos").get_by_text("écriture possible", exact=False).wait_for()   # 0.9.0
     page.get_by_role("link", name="Connexion").click()
-    page.get_by_role("region", name="Immich", exact=True).wait_for()
+    page.get_by_role("article", name="Immich", exact=True).wait_for()
+    assert page.get_by_role("region", name="Dossier des photos").count() == 0
     assert page.get_by_role("region", name="Journal").count() == 0 and page.get_by_role("button", name="Se déconnecter").count() == 0
 
 

@@ -93,7 +93,7 @@
       <p class="mt-2 text-sm font-medium" role="alert">Lot interrompu : {tache.erreur}</p>
     {:else if tache.message}<p class="mt-2 text-sm" role="status" id="tache">{tache.message}</p>{/if}
     {#if ailleurs}<p class="mt-2 text-sm" role="status" id="suppression-en-cours">Suppression en cours dans « {ailleurs.dossier} » : {ailleurs.fait} sur {ailleurs.total}.</p>{/if}
-    <Reconnaissance court {ondeconnecte} />
+    <Reconnaissance {ondeconnecte} />
     <!-- 0.4.0 : les dossiers que Millésime a fini de dater passent tout seuls (envoi et contrôle seulement) -->
     <label class="auto mt-3">
       <input type="checkbox" checked={a.auto_demandes} disabled={!!attente || lectureSeule}

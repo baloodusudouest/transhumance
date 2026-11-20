@@ -216,18 +216,25 @@ def bilan(chemin: str = "."):
 
 @app.get("/api/reconnaissance")
 def reconnaissance():
-    """0.1.5 : Immich fait-il travailler le PC ? Lecture seule, relue toutes les dix secondes par l'écran."""
-    return t().reconnaissance()
+    """0.1.5 : Immich fait-il travailler le PC ? Lecture seule, relue toutes les dix secondes par l'écran Migrer.
+    0.9.0 : la lecture sert aussi d'essai à la fiche « PC de calcul » (et nourrit son guide)."""
+    r = t().reconnaissance()
+    _noter_reconnaissance(r)
+    return r
 
 
 @app.get("/api/connexions")
 def connexions():
+    """0.9.0 : l'écran Connexion lit /api/maison/services. Cette route reste pour Réglages (journal, dossier des
+    photos) ; sa partie « immich » n'est plus lue par l'interface : à retirer en 0.10.0."""
     cfg = ETAT["cfg"]
     im = t().immich()
     try:
         immich = {"ok": True, "version": im.version(), "place_libre": im.place_libre()}
+        SERVICES.noter("immich", True, _phrase_immich(immich["version"], immich["place_libre"]))
     except ErreurImmich as exc:
         immich = {"ok": False, "erreur": str(exc)}
+        SERVICES.noter("immich", False, str(exc))
     finally:
         im.fermer()
     # 0.7.1 : plus de fichier d'essai écrit dans le dossier des photos (même en lecture seule) : on demande au système
@@ -236,6 +243,173 @@ def connexions():
                                           "exclus": t().exclus()},
             "version": __version__, "lecture_seule": cfg.lecture_seule, "lecture_seule_origine": cfg.lecture_seule_origine,
             "journal": [dict(l) for l in t().base.tous("SELECT le, quoi, detail FROM journal ORDER BY id DESC LIMIT 60")]}
+
+
+# ================================================================ fiches « Connexion » (0.9.0, contrat 3, socle 0.11.0)
+# GET /api/maison/services et POST /api/maison/services/{id}/verifier (session ou ANNEAU_CLE) : écran commun
+# $lib/services/Services.svelte, et fiche « État » de l'Anneau. Deux services : Immich, et le PC de calcul vu par la
+# reconnaissance d'Immich. Essais légers, en lecture seule : la version et la place libre d'Immich ; ses réglages de
+# reconnaissance, ses files et un /ping de chaque adresse déclarée (ne réveille pas le PC). Le dossier des photos
+# n'est pas un service : il est montré dans Réglages.
+
+def _poids(octets: int) -> str:
+    """Comme poids() de l'interface (format.js) : « 1,2 Go »."""
+    if not octets:
+        return "0"
+    if octets < 1024 ** 2:
+        return f"{max(1, round(octets / 1024))} ko"
+    if octets < 1024 ** 3:
+        return f"{octets / 1024 ** 2:.0f} Mo"
+    return f"{octets / 1024 ** 3:.1f} Go".replace(".", ",")
+
+
+def _phrase_immich(version: str, place: int) -> str:
+    return f"Version {version} · {_poids(place)} libres."
+
+
+def _essai_immich():
+    im = t().immich()
+    try:
+        return True, _phrase_immich(im.version(), im.place_libre())
+    finally:
+        im.fermer()
+
+
+def _verdict(r: dict | None) -> str:
+    """Même phrase que l'écran (Reconnaissance.svelte)."""
+    if not r:
+        return "Pas encore lu."
+    if not r.get("lisible"):
+        return "Réglages d'Immich illisibles"
+    if not r.get("active"):
+        return "Reconnaissance désactivée dans Immich"
+    if r.get("utilisee") is None:
+        return "Aucun service de reconnaissance ne répond"
+    return ("Le PC fait la reconnaissance" if r.get("sur_pc")
+            else "Le NAS fait la reconnaissance (le PC ne répond pas ou n'est pas déclaré)")
+
+
+def _resultat_reconnaissance(r: dict) -> tuple[bool, str]:
+    """Le voyant est vert seulement si le PC travaille (comme le point de l'ancien écran)."""
+    reste = sum(f.get("attente", 0) + f.get("en_cours", 0) for f in r.get("files") or [])
+    phrase = _verdict(r) + (f" · {reste} tâche(s) de reconnaissance en attente" if r.get("files") else "")
+    if r.get("lisible") is False and r.get("raison"):
+        phrase += " : " + r["raison"]
+    return bool(r.get("lisible") and r.get("active") and r.get("sur_pc")), phrase
+
+
+def _noter_reconnaissance(r: dict) -> None:
+    ETAT["reconnaissance"] = r
+    SERVICES.noter("pc-calcul", *_resultat_reconnaissance(r))
+
+
+def _essai_pc():
+    r = t().reconnaissance()
+    ETAT["reconnaissance"] = r
+    return _resultat_reconnaissance(r)
+
+
+def _guide_pc() -> dict:
+    """Guide de la fiche « PC de calcul » : la dernière lecture (aucun appel ici : le GET n'essaie rien), puis la
+    marche à suivre. Rien de propre à la maison dans le code : les adresses viennent des réglages d'Immich."""
+    r = ETAT.get("reconnaissance")
+    reglages = []
+    if not r:
+        reglages.append({"nom": "Adresses de reconnaissance", "valeur": "pas encore lues : Vérifier"})
+    elif not r.get("lisible"):
+        reglages.append({"nom": "Réglages d'Immich", "valeur": r.get("raison") or "illisibles"})
+    else:
+        reglages.append({"nom": "Reconnaissance dans Immich", "valeur": "activée" if r.get("active") else "désactivée"})
+        for i, a in enumerate(r.get("adresses") or []):
+            etat = (("répond : c'est lui qui travaille" if i == r.get("utilisee") else "répond, en secours")
+                    if a.get("repond") else "ne répond pas")
+            reglages.append({"nom": f"{i + 1}. {'NAS' if a.get('nas') else 'PC'}", "valeur": f"{a.get('adresse')} · {etat}"})
+        if not r.get("adresses"):
+            reglages.append({"nom": "Adresses de reconnaissance", "valeur": "aucune déclarée dans Immich"})
+    for f in (r or {}).get("files") or []:
+        reglages.append({"nom": f["nom"], "valeur": (f"{f['en_cours']} en cours · " if f.get("en_cours") else "")
+                                                    + f"{f.get('attente', 0)} en attente"})
+    return {
+        "reglages": reglages,
+        "allumer": [
+            "Allumer le PC (ou le sortir de veille) et ouvrir Docker Desktop : le conteneur immich_ml_pc redémarre "
+            "tout seul (restart: unless-stopped, fichier pc/immich-ml.yml du dépôt).",
+            "Attendre une dizaine de secondes, puis Vérifier : « Le PC fait la reconnaissance ». Le premier travail "
+            "télécharge les modèles une fois (volume model-cache).",
+            "PC éteint : rien à faire. Immich retombe tout seul sur l'adresse suivante (le NAS), plus lent.",
+            "Après la migration : « docker compose -f immich-ml.yml down » sur le PC, puis retirer l'adresse du PC "
+            "dans Immich.",
+        ],
+        "pannes": [
+            {"signe": "« Le NAS fait la reconnaissance (le PC ne répond pas ou n'est pas déclaré) »",
+             "faire": ["Le PC est-il allumé et sorti de veille ? Docker Desktop est-il ouvert, le conteneur "
+                       "immich_ml_pc lancé (première commande) ?",
+                       "Depuis un téléphone sur le Wi-Fi de la maison, ouvrir l'adresse du PC (Réglages lus, plus haut) "
+                       "suivie de /ping : la page doit répondre « pong ».",
+                       "Rien ne s'affiche : comparer l'adresse du PC (deuxième commande) à celle déclarée dans Immich ; "
+                       "si elle a changé, la corriger dans Immich ou réserver l'adresse dans la box. Puis vérifier que "
+                       "le port répond sur le PC lui-même (troisième commande, TcpTestSucceeded : True) ; si oui, "
+                       "c'est le pare-feu de Windows (voir « Installation »).",
+                       "Aucune adresse « PC » dans Réglages lus : elle n'est pas déclarée dans Immich (voir « Installation »)."],
+             "commandes": ["docker ps --filter name=immich_ml_pc", "ipconfig | findstr IPv4",
+                           "Test-NetConnection -ComputerName localhost -Port 3003"]},
+            {"signe": "Le conteneur immich_ml_pc s'arrête tout seul",
+             "faire": ["La fin de son journal dit pourquoi (version, modèles, mémoire…). La version doit être celle "
+                       "du serveur Immich (même valeur que IMMICH_VERSION sur le NAS)."],
+             "commandes": ["docker logs --tail 30 immich_ml_pc"]},
+            {"signe": "« Réglages d'Immich illisibles »",
+             "faire": ["La clé d'API de Transhumance n'a pas le droit de lire les réglages d'Immich : permission "
+                       "« systemConfig.read », clé d'un compte administrateur (TRANSHUMANCE_IMMICH_CLE)."],
+             "commandes": []},
+            {"signe": "« Reconnaissance désactivée dans Immich »",
+             "faire": ["Dans Immich : Administration › Paramètres › Apprentissage automatique, réactiver."],
+             "commandes": []},
+            {"signe": "« Aucun service de reconnaissance ne répond »",
+             "faire": ["Ni le PC ni le NAS ne répondent : vérifier aussi le conteneur immich-machine-learning dans "
+                       "Portainer (stack homelab)."],
+             "commandes": []},
+        ],
+        "une_fois": [
+            {"texte": "Copier pc/immich-ml.yml (dépôt transhumance) dans un dossier du PC (par exemple C:\\immich-ml), "
+                      "puis, dans ce dossier, avec Docker Desktop ouvert :",
+             "commande": "docker compose -f immich-ml.yml up -d"},
+            {"texte": "Dans Immich : Administration › Paramètres › Apprentissage automatique › « Ajouter une URL » "
+                      "http://<adresse du PC>:3003, et la glisser AU-DESSUS de l'adresse déjà présente. Immich "
+                      "essaie les adresses dans l'ordre : PC éteint, il retombe tout seul sur le NAS.",
+             "commande": ""},
+            {"texte": "Ce service n'a aucune protection : port 3003 ouvert au seul réseau local (PowerShell "
+                      "administrateur) :",
+             "commande": "New-NetFirewallRule -DisplayName \"Immich reconnaissance\" -Direction Inbound -Protocol TCP "
+                         "-LocalPort 3003 -RemoteAddress LocalSubnet -Action Allow"},
+            {"texte": "L'adresse du PC fixée dans la box (bail réservé), sinon elle peut changer et Immich ne la "
+                      "trouve plus.", "commande": ""},
+        ],
+        "terminal": "Les commandes se tapent dans PowerShell sur le PC (menu Démarrer › PowerShell).",
+        "note": "Transhumance ne change rien aux réglages d'Immich. Carte graphique NVIDIA : voir l'en-tête de "
+                "pc/immich-ml.yml. Ce guide n'a jamais été essayé sur la vraie installation.",
+    }
+
+
+SERVICES = maison.Services(APPLI)
+SERVICES.ajouter(
+    "immich", "Immich",
+    lit="Transhumance y lit la bibliothèque externe.",
+    ecrit="Transhumance y envoie les copies, y reporte albums, tags et visages, puis en retire les anciennes photos. "
+          "Ne mets pas Immich à jour pendant la migration.",
+    regle=lambda: bool(ETAT.get("cfg") and ETAT["cfg"].immich_cle),
+    reglage="TRANSHUMANCE_IMMICH_URL et TRANSHUMANCE_IMMICH_CLE",
+    essai=_essai_immich)
+SERVICES.ajouter(
+    "pc-calcul", "PC de calcul (reconnaissance d'Immich)",
+    lit="Qui fait la reconnaissance d'Immich (visages, recherche, texte) — le PC ou le NAS ? Immich essaie ces "
+        "adresses dans l'ordre et prend la première qui répond. Transhumance leur pose la même question toutes les "
+        "dix secondes : elle ne voit pas chaque calcul, mais si le PC répond en premier, c'est lui qu'Immich utilise.",
+    ecrit="Rien. Elle ne change rien aux réglages d'Immich.",
+    regle=lambda: bool(ETAT.get("cfg") and ETAT["cfg"].immich_cle),
+    reglage="TRANSHUMANCE_IMMICH_CLE",
+    essai=_essai_pc, guide=_guide_pc)
+# Monté APRÈS la garde : le dernier middleware ajouté passe en premier.
+maison.monter_services(app, SERVICES, lambda r: "sessions" in ETAT and ETAT["sessions"].connecte(r.cookies))
 
 
 # ---------------------------------------------------------------- réglages d'usage (0.7.0)

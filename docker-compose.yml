@@ -10,6 +10,7 @@ services:
       # Variables communes de la maison (module app/maison.py). 0.7.0 : les anciens noms ne sont plus lus.
       - MAISON_PASSWORD=${MAISON_PASSWORD}                        # mot de passe commun des applis (12 caractères au moins) : obligatoire
       - MAISON_JETON=${MAISON_JETON:-}                            # jeton commun : ouvre /externe/demandes (Millésime) et /externe/sauvegarde (l'Anneau) ; lit l'annuaire et les sauvegardes ; vide : portes fermées
+      - ANNEAU_CLE=${ANNEAU_CLE:-}                                # contrat 3 : l'Anneau lit les fiches « Connexion » ; vide = porte fermée
       - MAISON_JETON_ANCIEN=${MAISON_JETON_ANCIEN:-}              # accepté en plus pendant un changement de jeton ; vide sinon
       - MAISON_LECTURE_SEULE=${MAISON_LECTURE_SEULE:-}            # « oui » : aucune appli n'écrit ; TRANSHUMANCE_LECTURE_SEULE l'emporte si posée
       # - MAISON_ANNEAU_URL=http://anneau:8094                    # adresse de l'Anneau (annuaire, sauvegardes) : valeur par défaut
