@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.9.1 — 20 novembre 2026 (identifiant commun de la reconnaissance)
+- La fiche « PC de calcul (reconnaissance d'Immich) » prend l'identifiant commun **`immich-ml`** (celui de Chambre noire 0.9.0 pour le même service) au lieu de `pc-calcul`, réservé au calculateur de Millésime et au PC de calcul de Scriptorium. Nom affiché et guide inchangés. Route de l'Anneau : `POST /api/maison/services/immich-ml/verifier`.
+- Tests : `tests/test_fiches_connexion.py` suit le nouvel identifiant.
+- **Jamais essayé sur la vraie installation.**
+
 ## 0.9.0 — 20 novembre 2026 (fiches « Connexion » communes, contrat 3)
 - L'écran « Connexion » passe à l'écran commun des applis maison (socle 0.11.0, `$lib/services/`) : deux fiches dépliées, **Immich** et **PC de calcul (reconnaissance d'Immich)**. « Vérifier » ne teste que son service ; l'âge du dernier essai est affiché. Textes « lu » et « écrit » repris de l'ancien écran.
 - Serveur : registre `SERVICES` (`maison.Services`) et `GET /api/maison/services`, `POST /api/maison/services/{id}/verifier` (session ou `ANNEAU_CLE`, au plus un essai toutes les 30 s, rien d'écrit, permis en lecture seule). La fiche « État » de l'Anneau les lit.

@@ -300,7 +300,7 @@ def _resultat_reconnaissance(r: dict) -> tuple[bool, str]:
 
 def _noter_reconnaissance(r: dict) -> None:
     ETAT["reconnaissance"] = r
-    SERVICES.noter("pc-calcul", *_resultat_reconnaissance(r))
+    SERVICES.noter("immich-ml", *_resultat_reconnaissance(r))
 
 
 def _essai_pc():
@@ -400,7 +400,7 @@ SERVICES.ajouter(
     reglage="TRANSHUMANCE_IMMICH_URL et TRANSHUMANCE_IMMICH_CLE",
     essai=_essai_immich)
 SERVICES.ajouter(
-    "pc-calcul", "PC de calcul (reconnaissance d'Immich)",
+    "immich-ml", "PC de calcul (reconnaissance d'Immich)",
     lit="Qui fait la reconnaissance d'Immich (visages, recherche, texte) — le PC ou le NAS ? Immich essaie ces "
         "adresses dans l'ordre et prend la première qui répond. Transhumance leur pose la même question toutes les "
         "dix secondes : elle ne voit pas chaque calcul, mais si le PC répond en premier, c'est lui qu'Immich utilise.",

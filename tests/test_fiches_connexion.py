@@ -10,7 +10,7 @@ from tests.test_reglages import client, connecter  # noqa: F401 — fixtures par
 
 RACINE = Path(__file__).resolve().parent.parent
 CLE = "cle-anneau-de-test-1234567890"
-IDS = ["immich", "pc-calcul"]
+IDS = ["immich", "immich-ml"]
 CHAMPS = {"id", "nom", "genre", "cible", "etat", "lit", "ecrit", "reglage", "detail", "verifie_le", "guide",
           "derniere_ecriture", "gestes"}
 
@@ -67,13 +67,13 @@ def test_verifier_immich_et_pc_sans_rien_ecrire(client, monkeypatch):
     avant = list(im.ecrits)
     connecter(client)
     fiches = {s["id"]: s for s in client.get("/api/maison/services").json()["services"]}
-    assert fiches["immich"]["etat"] == "relie" and fiches["pc-calcul"]["etat"] == "relie"
-    assert fiches["immich"]["gestes"] == [] and fiches["pc-calcul"]["guide"]["allumer"]
-    assert "pas encore lues" in fiches["pc-calcul"]["guide"]["reglages"][0]["valeur"]
+    assert fiches["immich"]["etat"] == "relie" and fiches["immich-ml"]["etat"] == "relie"
+    assert fiches["immich"]["gestes"] == [] and fiches["immich-ml"]["guide"]["allumer"]
+    assert "pas encore lues" in fiches["immich-ml"]["guide"]["reglages"][0]["valeur"]
     s = client.post("/api/maison/services/immich/verifier").json()
     assert s["etat"] == "repond" and s["detail"].startswith("Version 3.4.1 · ") and s["verifie_le"]
     monkeypatch.setattr(Transhumance, "_repond", staticmethod(lambda u: "pc-invente" not in u))   # PC éteint
-    s = client.post("/api/maison/services/pc-calcul/verifier").json()
+    s = client.post("/api/maison/services/immich-ml/verifier").json()
     assert s["etat"] == "ne_repond_pas" and s["detail"].startswith("Le NAS fait la reconnaissance")
     reglages = {r["nom"]: r["valeur"] for r in s["guide"]["reglages"]}
     assert reglages["1. PC"].endswith("ne répond pas") and reglages["2. NAS"].endswith("c'est lui qui travaille")
@@ -86,5 +86,5 @@ def test_la_lecture_de_l_ecran_migrer_sert_d_essai_au_pc(client, monkeypatch):
     monkeypatch.setattr(Transhumance, "_repond", staticmethod(lambda u: True))
     connecter(client)
     assert client.get("/api/reconnaissance").json()["sur_pc"]
-    pc = next(s for s in client.get("/api/maison/services").json()["services"] if s["id"] == "pc-calcul")
+    pc = next(s for s in client.get("/api/maison/services").json()["services"] if s["id"] == "immich-ml")
     assert pc["etat"] == "repond" and pc["detail"].startswith("Le PC fait la reconnaissance")
