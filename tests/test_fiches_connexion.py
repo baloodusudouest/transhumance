@@ -49,7 +49,7 @@ def test_verifier_inconnu_et_pas_relie(client):
 
 
 def test_copies_communes_non_retouchees():
-    assert maison.CONTRAT == 3 and maison.VERSION_SOCLE == "0.11.0"
+    assert maison.CONTRAT == 3 and maison.VERSION_SOCLE == "0.11.1"
     assert maison.empreinte_calculee() == maison.empreinte_ecrite()
     for nom in maison.FICHIERS_INTERFACE:
         ecrite, calculee = maison.empreinte_interface(RACINE / "frontend" / "src" / "lib" / "services" / nom)

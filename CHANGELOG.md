@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.9.2 — 20 novembre 2026 (socle 0.11.1)
+- Copies communes du socle 0.11.1 : sur une fiche « Connexion », le titre devient « Pour le relier » quand le réglage se fait dans Réglages de l'appli (et non dans la stack).
+- **Jamais essayé sur la vraie installation.**
+
 ## 0.9.1 — 20 novembre 2026 (identifiant commun de la reconnaissance)
 - La fiche « PC de calcul (reconnaissance d'Immich) » prend l'identifiant commun **`immich-ml`** (celui de Chambre noire 0.9.0 pour le même service) au lieu de `pc-calcul`, réservé au calculateur de Millésime et au PC de calcul de Scriptorium. Nom affiché et guide inchangés. Route de l'Anneau : `POST /api/maison/services/immich-ml/verifier`.
 - Tests : `tests/test_fiches_connexion.py` suit le nouvel identifiant.

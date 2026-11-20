@@ -61,7 +61,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 CONTRAT = 3
-VERSION_SOCLE = "0.11.0"      # version du socle d'où vient ce fichier (publiée dans /health : version_socle)
+VERSION_SOCLE = "0.11.1"      # version du socle d'où vient ce fichier (publiée dans /health : version_socle)
 VRAI = {"oui", "1", "true", "yes", "vrai"}
 FAUX = {"non", "0", "false", "no", "faux"}
 
@@ -1122,4 +1122,4 @@ def empreinte_interface(chemin: str | Path) -> tuple[str, str]:
         return "", hashlib.sha256(texte.rstrip("\n").encode("utf-8")).hexdigest()[:16]
     corps, fin = texte.rsplit(MARQUE_INTERFACE, 1)
     return fin.replace("-->", "").strip(), hashlib.sha256(corps.rstrip("\n").encode("utf-8")).hexdigest()[:16]
-# empreinte: d1a04ca3d55fe032
+# empreinte: a8ec7faa7d64beae
