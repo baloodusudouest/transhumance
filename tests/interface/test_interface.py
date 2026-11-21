@@ -78,8 +78,10 @@ def test_2_cocher_une_annee_et_la_faire_passer(page):
     parent.click()                                                   # cliquer une case barrée coche tout le dossier
     page.wait_for_function("el => el.checked && !el.indeterminate", arg=parent.element_handle())
     parent.click()                                                   # 0.9.4 : une case pleine se vide d'un clic
+    # le navigateur décoche la case tout de suite : on attend la réponse du serveur, vue sur la case enfant
+    enfant = page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True)
+    page.wait_for_function("el => !el.checked", arg=enfant.element_handle())
     page.wait_for_function("el => !el.checked && !el.indeterminate", arg=parent.element_handle())
-    assert not page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True).is_checked()
     page.get_by_role("checkbox", name="Cocher 2019-12-25", exact=True).check()   # « tout décocher » vide une case barrée
     page.wait_for_function("el => el.indeterminate", arg=parent.element_handle())
     page.get_by_role("button", name="Tout décocher dans 2019", exact=True).click()
