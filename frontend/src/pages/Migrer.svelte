@@ -201,11 +201,11 @@
           <ChevronRight class="size-4 transition-transform {ouverts.has(n.chemin) ? 'rotate-90' : ''}" aria-hidden="true" /></button>
       {:else}<span class="pli" aria-hidden="true"></span>{/if}
       <!-- Case pleine : tout ce dossier est coché. Case barrée d'un trait : une partie seulement, dans ses sous-dossiers.
-           Décocher une case qu'on avait remplie depuis un choix partiel rend ce choix (0.1.3). -->
+           Case pleine : un clic décoche tout (0.9.4). -->
       <input type="checkbox" class="size-5 flex-none accent-[var(--app)]" checked={n.selection === 'tout'} indeterminate={n.selection === 'partiel'}
              disabled={n.exclu || tache.en_cours || attente === 'dossier' || !n.a_cocher}
              aria-label={'Cocher ' + n.nom} aria-checked={n.selection === 'partiel' ? 'mixed' : n.selection === 'tout'}
-             title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : n.souvenir ? `Décocher revient aux ${n.souvenir} sous-dossier(s) cochés avant` : ''}
+             title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}
              onchange={(e) => regler(n.chemin, { coche: n.selection === 'partiel' ? true : e.currentTarget.checked })} />
       <span class="min-w-0 flex-1">
         <span class="block truncate font-medium">{n.nom}{#if n.exclu}&nbsp;<span class="font-normal text-muted-foreground">· jamais migré</span>{/if}{#if n.demande}&nbsp;<span class="demande" title={'Demandé le ' + quand(n.demande.le)}>demandé par {n.demande.de}</span>{/if}</span>

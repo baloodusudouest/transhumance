@@ -246,29 +246,21 @@ class Transhumance:
             self._cocher(chemin, bool(coche), vider)
 
     def _cocher(self, chemin: str, coche: bool, vider: bool = False) -> None:
-        """Cocher un dossier coche tout ce qu'il contient (sauf les dossiers exclus).
-        0.1.3 : si une partie seulement était cochée, on s'en souvient — décocher le dossier
-        rend alors ce choix au lieu de tout décocher. « vider » décoche tout, sans souvenir."""
-        dessous = [d for d in self._descendance(chemin) if not self._exclu(d)]
-        avant = {l["chemin"] for l in self.base.tous("SELECT chemin FROM dossiers WHERE coche = 1")} & set(dessous)
-        cle = "souvenir:" + chemin
-        souvenir = [d for d in (self.base.lire(cle) or []) if d in dessous]
-        # Un clic ailleurs dans la même branche périme les souvenirs des dossiers au-dessus et en dessous
-        for l in self.base.tous("SELECT cle FROM reglages WHERE cle LIKE 'souvenir:%'"):
-            autre = l["cle"][len("souvenir:"):]
-            if autre != chemin and (autre in (".", "") or chemin in (".", "") or autre.startswith(chemin + "/") or chemin.startswith(autre + "/")):
-                self.base.executer("DELETE FROM reglages WHERE cle = ?", (l["cle"],))
-        if coche:
-            choisis = set(dessous)
-            if avant and len(avant) < len(dessous):
-                self.base.ecrire(cle, sorted(avant))
-        else:
-            rendre = not vider and souvenir and len(avant) == len(dessous)
-            choisis = set(souvenir) if rendre else set()
-            self.base.executer("DELETE FROM reglages WHERE cle = ?", (cle,))
+        """Cocher un dossier coche tout ce qu'il contient (sauf les dossiers exclus et les dossiers finis) ; le décocher
+        décoche tout ce qu'il contient.
+        0.9.4 : plus de « souvenir » (0.1.3) : décocher un dossier plein rendait l'ancien choix partiel, et une case
+        restait barrée au lieu de se vider (vu le 21/11/2026 sur la Pellicule). « vider » est gardé pour l'écran : même effet."""
+        finis = self._finis()
+        dessous = [d for d in self._descendance(chemin) if not self._exclu(d) and d not in finis]
+        self.base.executer("DELETE FROM reglages WHERE cle LIKE 'souvenir:%'")       # restes des versions d'avant
         # 0.9.3 : une seule écriture pour toute la branche (avant : une par dossier, plusieurs secondes sur la Pellicule)
         self.base.plusieurs("INSERT INTO dossiers(chemin, coche) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET coche = excluded.coche",
-                            [(d, int(d in choisis)) for d in dessous])
+                            [(d, int(coche)) for d in dessous])
+
+    def _finis(self) -> set[str]:
+        """0.9.4 : dossiers dont tous les originaux sont supprimés. Ils n'ont plus de case : ni cochés, ni comptés."""
+        return {l["dossier"] for l in self.base.tous(
+            "SELECT dossier FROM photos GROUP BY dossier HAVING SUM(etat != 'supprimee') = 0")}
 
     def _exclu(self, dossier: str) -> bool:
         return PurePosixPath(dossier).parts[:1] in [(x,) for x in self.exclus()]
@@ -349,6 +341,7 @@ class Transhumance:
         self.base.executer("UPDATE dossiers SET coche = 0 WHERE coche = 1 AND chemin IN "
                            "(SELECT dossier FROM photos GROUP BY dossier HAVING SUM(etat != 'supprimee') = 0)")
         reglages = {l["chemin"]: l for l in self.base.tous("SELECT * FROM dossiers")}
+        finis = self._finis()
         # 0.3.0 : une demande tombe d'elle-même quand le dossier n'a plus rien à envoyer
         demandes = self.base.lire("demandes", {})
         restent = {l["dossier"] for l in self.base.tous("SELECT DISTINCT dossier FROM photos WHERE etat = 'vue'")}
@@ -400,7 +393,9 @@ class Transhumance:
         for n in noeuds.values():
             n["a_cocher"], n["coches"] = 0, 0
         for chemin, n in noeuds.items():
-            if not n["ici"] or n["exclu"]:
+            # 0.9.4 : un dossier fini n'est plus compté (il était compté mais toujours décoché : la case du parent
+            # ne pouvait jamais être pleine et restait barrée)
+            if not n["ici"] or n["exclu"] or chemin in finis:
                 continue
             c = chemin
             while True:
@@ -411,10 +406,6 @@ class Transhumance:
                 c = str(PurePosixPath(c).parent)
         for n in noeuds.values():
             n["selection"] = "rien" if not n["coches"] else "tout" if n["coches"] == n["a_cocher"] else "partiel"
-        for l in self.base.tous("SELECT cle, valeur FROM reglages WHERE cle LIKE 'souvenir:%'"):
-            n = noeuds.get(l["cle"][len("souvenir:"):])
-            if n and n["selection"] == "tout":
-                n["souvenir"] = len(json.loads(l["valeur"]))       # décocher rendra ce choix
         for n in noeuds.values():
             n["enfants"].sort(key=str.casefold)
         return {"racine": ".", "noeuds": noeuds, "inventaire": self.base.lire("inventaire"),
@@ -641,7 +632,8 @@ class Transhumance:
         # 0.9.3 : exactement les dossiers que l'arbre compte comme cochés (au moins une photo visible), ni plus ni moins
         coches = [l["chemin"] for l in self.base.tous(
             "SELECT chemin FROM dossiers WHERE coche = 1 AND chemin IN (SELECT DISTINCT dossier FROM photos WHERE cachee = 0) ORDER BY chemin")]
-        return [d for d in coches if not self._exclu(d)]
+        finis = self._finis()
+        return [d for d in coches if not self._exclu(d) and d not in finis]
 
     def verifier_place(self, dossiers: list[str]) -> dict:
         besoin = sum((self.base.un("SELECT COALESCE(SUM(taille),0) s FROM photos WHERE dossier = ? AND etat = 'vue'", (d,))["s"]) for d in dossiers)

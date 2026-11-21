@@ -4,6 +4,7 @@
 
 ## Où on en est (21/11/2026)
 
+- **0.9.4 (21/11/2026)** : case d'un dossier vide → pleine → vide. Dossiers finis (tous originaux supprimés) sans case (`_finis()` dans `_cocher`, `arbre`, `a_migrer`). Souvenir de la 0.1.3 retiré. Test `test_094_…`. **Jamais essayé sur la vraie installation.**
 - **0.9.3 (21/11/2026)** : rien ne part sans être coché. `POST /api/migrer` exige la liste affichée (`dossiers`) et refuse si elle a changé (409) ; le lot passe cette liste figée. `Transhumance.verrou_lot` : un seul lot à la fois (pris par `/api/migrer` ou `_boucle_auto` avant le choix, passé à `migrer(…, verrou_pris=True)` qui le rend). `/api/dossier` refusé pendant un lot. `demande_suivante` ne prend une demande que si son dossier est coché. `tache` porte `origine` et `dossiers`. Tests `test_093_…`. Cause : bug vu le 21/11 (Pellicule décochée envoyée). **Jamais essayé sur la vraie installation.**
 - **0.9.2 (20/11/2026)** : copies communes du socle 0.11.1 (titre « Pour le relier » quand le réglage est dans l'appli).
 - **0.9.1** (20/11/2026) : la fiche de la reconnaissance d'Immich a l'id commun `immich-ml` (au lieu de `pc-calcul`, réservé au calculateur de Millésime et au PC de Scriptorium). **Jamais essayé sur la vraie installation.**

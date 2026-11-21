@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.9.4 — 21 novembre 2026 (la case d'un dossier se vide d'un clic)
+- **Vu sur la vraie installation le 21/11/2026** : cocher la Pellicule donnait une case barrée, puis pleine, puis de nouveau barrée, sans jamais revenir à vide. Deux causes :
+  - les **dossiers finis** (tous les originaux supprimés) étaient comptés dans la case du parent, mais toujours remis à « décoché » : la case de la Pellicule ne pouvait pas être pleine ;
+  - le **« souvenir »** de la 0.1.3 : décocher une case pleine rendait l'ancien choix partiel au lieu de tout décocher.
+- **Correctifs** : un dossier fini n'a plus de case (ni coché, ni compté, ni dans le lot, `Transhumance._finis()`). Le souvenir est retiré : vide → un clic → pleine → un clic → vide ; barrée → un clic → pleine. « tout décocher » reste. Les souvenirs gardés en base sont effacés au premier clic.
+- Tests : `test_094_la_case_d_un_parent_va_de_vide_a_pleine_puis_vide` remplace le test du souvenir ; test d'écran 2 adapté. 61 tests serveur et 7 tests d'écran passent.
+- **Jamais essayé sur la vraie installation.**
+
 ## 0.9.3 — 21 novembre 2026 (rien ne part sans être coché)
 - **Vu sur la vraie installation le 21/11/2026** : un lot lancé à 17:38 faisait passer la Pellicule alors qu'aucun de ses dossiers n'était coché à l'écran (« Envoi de Pellicule/2016/… (4 / 20581) », 445 dossiers cochés pour 18,4 Go). Causes trouvées dans le code :
   - une case qu'on change n'occupait pas l'écran (attente vide) : « Faire passer » restait cliquable avec l'ancienne liste pendant que la case s'enregistrait (une écriture par sous-dossier, plusieurs secondes sur la Pellicule), et le serveur prenait les cases telles qu'elles étaient à ce moment-là ;
