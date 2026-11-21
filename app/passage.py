@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from pathlib import Path, PurePosixPath
 
@@ -56,7 +57,10 @@ REGLAGES_VARIABLES = {"exclus": "TRANSHUMANCE_EXCLUS"}      # lue au premier dé
 class Transhumance:
     def __init__(self, cfg: Config, base: Base, transport=None):
         self.cfg, self.base, self._transport = cfg, base, transport
-        self.tache: dict = {"en_cours": False, "message": "", "fait": 0, "total": 0, "erreur": None}
+        self.tache: dict = {"en_cours": False, "message": "", "fait": 0, "total": 0, "erreur": None, "origine": None, "dossiers": 0}
+        # 0.9.3 : un seul lot à la fois. Avant, un passage automatique pouvait démarrer pendant « Faire passer » (ou
+        # l'inverse) : deux lots tournaient ensemble sur le même compteur. migrer() le prend ou le reçoit, et le rend.
+        self.verrou_lot = threading.Lock()
         self.suppression: dict = {"en_cours": False, "dossier": "", "fait": 0, "total": 0, "etape": ""}
         self.reglages = maison.Reglages(cfg.data / "reglages.json", REGLAGES_DEFAUTS, REGLAGES_VARIABLES)
         for k in self.reglages.repris:                     # la valeur n'est pas écrite : des noms de dossiers
@@ -262,8 +266,9 @@ class Transhumance:
             rendre = not vider and souvenir and len(avant) == len(dessous)
             choisis = set(souvenir) if rendre else set()
             self.base.executer("DELETE FROM reglages WHERE cle = ?", (cle,))
-        for d in dessous:
-            self.base.executer("INSERT INTO dossiers(chemin, coche) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET coche = excluded.coche", (d, int(d in choisis)))
+        # 0.9.3 : une seule écriture pour toute la branche (avant : une par dossier, plusieurs secondes sur la Pellicule)
+        self.base.plusieurs("INSERT INTO dossiers(chemin, coche) VALUES (?,?) ON CONFLICT(chemin) DO UPDATE SET coche = excluded.coche",
+                            [(d, int(d in choisis)) for d in dessous])
 
     def _exclu(self, dossier: str) -> bool:
         return PurePosixPath(dossier).parts[:1] in [(x,) for x in self.exclus()]
@@ -308,7 +313,7 @@ class Transhumance:
         Rend le dossier passé, ou None. Une demande impossible (place) est marquée et n'est pas retentée."""
         chemin = self.demande_suivante()
         if chemin:
-            self.migrer([chemin])
+            self.migrer([chemin], origine="Millésime")
         return chemin
 
     def demande_suivante(self) -> str | None:
@@ -318,8 +323,10 @@ class Transhumance:
             return None
         demandes = self.base.lire("demandes", {})
         restent = {l["dossier"] for l in self.base.tous("SELECT DISTINCT dossier FROM photos WHERE etat IN ('vue', 'envoyee')")}
+        # 0.9.3 : une demande ne part que si son dossier est coché ; sinon elle attend, avec sa pastille
+        coches = set(self.a_migrer())
         for chemin, d in sorted(demandes.items(), key=lambda x: x[1].get("le", "")):
-            if d.get("erreur") or chemin not in restent or self._exclu(chemin):
+            if d.get("erreur") or chemin not in restent or self._exclu(chemin) or chemin not in coches:
                 continue
             place = self.verifier_place([chemin])
             if not place["possible"]:
@@ -631,7 +638,9 @@ class Transhumance:
         raise Refus("Immich n'a pas fini son travail dans le délai : relance « Migrer » plus tard, rien n'est perdu.")
 
     def a_migrer(self) -> list[str]:
-        coches = [l["chemin"] for l in self.base.tous("SELECT chemin FROM dossiers WHERE coche = 1 ORDER BY chemin")]
+        # 0.9.3 : exactement les dossiers que l'arbre compte comme cochés (au moins une photo visible), ni plus ni moins
+        coches = [l["chemin"] for l in self.base.tous(
+            "SELECT chemin FROM dossiers WHERE coche = 1 AND chemin IN (SELECT DISTINCT dossier FROM photos WHERE cachee = 0) ORDER BY chemin")]
         return [d for d in coches if not self._exclu(d)]
 
     def verifier_place(self, dossiers: list[str]) -> dict:
@@ -643,9 +652,19 @@ class Transhumance:
             im.fermer()
         return {"besoin": besoin, "libre": libre, "possible": besoin <= libre * self.cfg.marge_place}
 
-    def migrer(self, dossiers: list[str] | None = None) -> None:
+    def migrer(self, dossiers: list[str] | None = None, origine: str | None = None, verrou_pris: bool = False) -> None:
         """Fait passer les dossiers cochés (ou ceux donnés : passage automatique d'une demande). Rejouable : une
-        photo déjà envoyée n'est pas renvoyée."""
+        photo déjà envoyée n'est pas renvoyée.
+        0.9.3 : un seul lot à la fois (verrou_lot). verrou_pris : l'appelant l'a déjà pris (route /api/migrer, boucle
+        automatique) et le passe ici ; il est rendu à la fin dans tous les cas."""
+        if not verrou_pris and not self.verrou_lot.acquire(blocking=False):
+            raise Refus("Un lot est déjà en cours.", 409)
+        try:
+            self._migrer(dossiers, origine)
+        finally:
+            self.verrou_lot.release()
+
+    def _migrer(self, dossiers: list[str] | None, origine: str | None) -> None:
         self.exiger_ecriture()
         dossiers = dossiers or self.a_migrer()
         if not dossiers:
@@ -654,7 +673,9 @@ class Transhumance:
         if not place["possible"]:
             raise Refus("Pas assez de place libre pour ce lot : coche moins de dossiers, ou supprime d'abord les originaux d'un lot déjà contrôlé.")
         total = sum(self.base.un("SELECT COUNT(*) n FROM photos WHERE dossier = ? AND etat IN ('vue','envoyee')", (d,))["n"] for d in dossiers)
-        self.tache.update(en_cours=True, fait=0, total=total, erreur=None, message="Envoi…")
+        avant = f"Demandé par {origine} : " if origine else ""          # 0.9.3 : l'écran dit qui a lancé le lot
+        self.tache.update(en_cours=True, fait=0, total=total, erreur=None, message=avant + "Envoi…", origine=origine, dossiers=len(dossiers))
+        self.base.noter("Lot lancé", {"dossiers": len(dossiers), "par": origine or "Faire passer"})
         im = self.immich()
         try:
             albums: dict[str, str] = {}
@@ -664,7 +685,7 @@ class Transhumance:
                 nouveaux: dict[str, str] = {}
                 # Les parties vidéo des photos animées d'abord : la photo s'y rattache à l'envoi
                 for l in self.base.tous("SELECT * FROM photos WHERE dossier = ? AND etat = 'vue' ORDER BY cachee DESC, rel", (d,)):
-                    self.tache["message"] = f"Envoi de {d}"
+                    self.tache["message"] = f"{avant}Envoi de {d}"
                     try:     # 0.7.3 : un fichier refusé par Immich ne bloque plus tout le lot à chaque relance
                         self._envoyer(im, l, album_id, nouveaux)
                     except ErreurImmich as exc:
@@ -679,12 +700,12 @@ class Transhumance:
             self.tache.update(fait=0, total=sum(self.base.un("SELECT COUNT(*) n FROM photos WHERE dossier = ? AND etat = 'envoyee'", (d,))["n"] for d in dossiers))
             for d in dossiers:
                 for l in self.base.tous("SELECT * FROM photos WHERE dossier = ? AND etat = 'envoyee' ORDER BY rel", (d,)):
-                    self.tache["message"] = f"Contrôle de {d}"
+                    self.tache["message"] = f"{avant}Contrôle de {d}"
                     self._controler(im, l)
                     self.tache["fait"] += 1
             self.exporter()
             self.base.noter("Lot passé", {"dossiers": len(dossiers)})
-            self.tache["message"] = "Lot passé : lis le bilan."
+            self.tache["message"] = f"{avant}Lot passé : lis le bilan."
         except (ErreurImmich, Refus, OSError) as exc:
             self.tache["erreur"] = str(exc)
             log.warning("Lot interrompu : %s", exc)

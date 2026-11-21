@@ -1,5 +1,22 @@
 # Journal des versions
 
+## 0.9.3 — 21 novembre 2026 (rien ne part sans être coché)
+- **Vu sur la vraie installation le 21/11/2026** : un lot lancé à 17:38 faisait passer la Pellicule alors qu'aucun de ses dossiers n'était coché à l'écran (« Envoi de Pellicule/2016/… (4 / 20581) », 445 dossiers cochés pour 18,4 Go). Causes trouvées dans le code :
+  - une case qu'on change n'occupait pas l'écran (attente vide) : « Faire passer » restait cliquable avec l'ancienne liste pendant que la case s'enregistrait (une écriture par sous-dossier, plusieurs secondes sur la Pellicule), et le serveur prenait les cases telles qu'elles étaient à ce moment-là ;
+  - un passage automatique (demande de Millésime) pouvait démarrer en même temps que « Faire passer » : deux lots ensemble sur le même compteur ;
+  - une demande de Millésime partait même si son dossier était décoché.
+- **Correctifs** :
+  - « Faire passer » redonne la liste des dossiers affichés (`POST /api/migrer` `{"dossiers": [...]}`, obligatoire) ; si les cases ont changé depuis, rien ne part (409, « Les cases ont changé depuis l'affichage »). Le lot fait passer exactement cette liste, figée.
+  - Pendant qu'une case s'enregistre, les cases et « Faire passer » sont grisés ; la liste est toujours relue après.
+  - Cocher ou décocher une branche s'écrit en une seule fois (`Base.plusieurs`).
+  - **Un seul lot à la fois** : verrou `Transhumance.verrou_lot`, pris par `/api/migrer` ou par la boucle automatique avant de choisir, rendu par `migrer` dans tous les cas.
+  - `POST /api/dossier` refusé (409) pendant un lot : un lot lit ses dossiers et ses albums au départ.
+  - **Demandes de Millésime : seulement si le dossier est coché** (choix de Julien, 21/11/2026). Un dossier décoché garde sa demande et sa pastille, et attend.
+  - `a_migrer()` ne rend que les dossiers que l'arbre compte (au moins une photo visible).
+  - L'écran dit qui a lancé le lot (« Demandé par Millésime : Envoi de … ») et sa taille (« lot de N dossier(s) ») ; ligne « Lot lancé » au journal (nombre de dossiers, par qui).
+- Tests : 4 nouveaux (`test_093_…` dans `test_passage.py`), `test_040` et `test_sante.py` suivent le verrou ; 61 tests serveur et 7 tests d'écran passent.
+- Le lot déjà en route sur la vraie installation n'est pas arrêté par cette version : seule la copie est faite (aucun original supprimé sans clic).
+
 ## 0.9.2 — 20 novembre 2026 (socle 0.11.1)
 - Copies communes du socle 0.11.1 : sur une fiche « Connexion », le titre devient « Pour le relier » quand le réglage se fait dans Réglages de l'appli (et non dans la stack).
 - **Jamais essayé sur la vraie installation.**

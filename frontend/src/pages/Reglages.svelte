@@ -102,7 +102,7 @@
                 class="mt-1.5 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm"></textarea>
       <label class="mt-3 flex cursor-pointer items-start gap-3 text-sm">
         <input type="checkbox" bind:checked={auto} class="mt-0.5 size-4 accent-[var(--app)]" />
-        <span>Faire passer tout seuls les dossiers demandés par Millésime <span class="text-muted-foreground">(envoi et contrôle ; la suppression reste un clic)</span></span>
+        <span>Faire passer tout seuls les dossiers demandés par Millésime <span class="text-muted-foreground">(seulement s'ils sont cochés ; envoi et contrôle ; la suppression reste un clic)</span></span>
       </label>
       <div class="mt-4"><Button onclick={enregistrer} disabled={!change || enregistre}>Enregistrer</Button></div>
     {/if}

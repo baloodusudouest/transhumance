@@ -429,12 +429,14 @@ def test_parcours_par_l_api(client):
     import time
     t, im, ids, photos = client.monde
     assert client.post("/api/connexion", json={"mot_de_passe": MDP}).status_code == 200
-    assert client.post("/api/migrer").status_code == 422                      # rien de coché
+    assert client.post("/api/migrer", json={"dossiers": []}).status_code == 422  # rien de coché
+    assert client.post("/api/migrer").status_code == 422                      # 0.9.3 : la liste affichée est obligatoire
     a = client.post("/api/dossier", json={"chemin": "Pense bete", "coche": True}).json()
     assert a["noeuds"]["Pense bete/Travaux"]["coche"] and a["noeuds"]["Pense bete/Travaux"]["album"] == "Pense bete – Travaux"
     client.post("/api/dossier", json={"chemin": "Pense bete/Travaux", "album": "Travaux maison"})
-    assert client.get("/api/lot").json()["possible"]
-    assert client.post("/api/migrer").status_code == 200
+    lot = client.get("/api/lot").json()
+    assert lot["possible"]
+    assert client.post("/api/migrer", json={"dossiers": lot["dossiers"]}).status_code == 200
     for _ in range(100):
         if not client.get("/api/arbre").json()["tache"]["en_cours"]:
             break
@@ -489,6 +491,8 @@ def test_040_passage_automatique_des_demandes(client, monkeypatch):
     assert t.passer_demande_suivante() is None                                                 # coupé par défaut
     assert client.post("/api/connexion", json={"mot_de_passe": t.cfg.password}).status_code == 200
     assert client.post("/api/auto-demandes", json={"oui": True}).json()["auto_demandes"] is True
+    assert t.passer_demande_suivante() is None                                                 # 0.9.3 : pas coché
+    t.regler_dossier("Pellicule/2020/2020-06-10", coche=True)
     assert t.passer_demande_suivante() == "Pellicule/2020/2020-06-10"
     etats = {l["etat"] for l in t.base.tous("SELECT etat FROM photos WHERE dossier = ?", ("Pellicule/2020/2020-06-10",))}
     assert "vue" not in etats and "supprimee" not in etats                                      # passé, originaux gardés
@@ -692,3 +696,62 @@ def test_m32_deconnexion_gardee_apres_redemarrage_et_connexions_n_ecrit_rien(cli
         assert c.get("/api/arbre").status_code == 401
         main.ETAT["sessions"].generation = 0                                                 # contre-épreuve : le cookie est bien lu
         assert c.get("/api/arbre").status_code == 200
+
+
+# ------------------------------------------------------------------ 0.9.3 : rien ne part sans être coché
+def test_093_une_demande_de_millesime_attend_que_son_dossier_soit_coche(client, monkeypatch):
+    """Vu le 21/11/2026 : la Pellicule, décochée, partait quand même. Une demande ne passe que si son dossier est coché."""
+    t, im, ids, photos = client.monde
+    monkeypatch.setenv("MAISON_JETON", "jeton-m")
+    h = {"Authorization": "Bearer jeton-m"}
+    client.post("/externe/demandes", json={"dossier": f"{t.cfg.racine_immich}/Pellicule/2020/2020-06-10", "de": "Millésime"}, headers=h)
+    t.regler_auto(True)
+    avant = list(im.ecrits)
+    assert t.passer_demande_suivante() is None                                     # décoché : rien ne part
+    assert im.ecrits == avant
+    assert t.arbre()["noeuds"]["Pellicule/2020/2020-06-10"]["demande"]["de"] == "Millésime"   # la demande attend
+    t.regler_dossier("Pellicule/2020/2020-06-10", coche=True)
+    assert t.passer_demande_suivante() == "Pellicule/2020/2020-06-10"
+    assert t.tache["origine"] == "Millésime" and t.tache["message"].startswith("Demandé par Millésime")
+    assert not t.verrou_lot.locked()
+
+
+def test_093_faire_passer_refuse_une_liste_perimee(client):
+    """L'écran redonne la liste qu'il montrait : si une case a changé entre-temps, rien ne part."""
+    t, im, ids, photos = client.monde
+    assert client.post("/api/connexion", json={"mot_de_passe": MDP}).status_code == 200
+    client.post("/api/dossier", json={"chemin": "Pellicule", "coche": True})
+    vue = client.get("/api/lot").json()["dossiers"]
+    assert any(d.startswith("Pellicule/2020") for d in vue)
+    client.post("/api/dossier", json={"chemin": "Pellicule/2020", "coche": False})  # décoché après l'affichage
+    avant = list(im.ecrits)
+    r = client.post("/api/migrer", json={"dossiers": vue})
+    assert r.status_code == 409 and "ont changé" in r.json()["detail"]
+    assert im.ecrits == avant and not t.verrou_lot.locked() and not t.tache["en_cours"]
+
+
+def test_093_un_seul_lot_a_la_fois_et_cases_figees_pendant_un_lot(client):
+    t, im, ids, photos = client.monde
+    assert client.post("/api/connexion", json={"mot_de_passe": MDP}).status_code == 200
+    client.post("/api/dossier", json={"chemin": "Pense bete", "coche": True})
+    lot = client.get("/api/lot").json()["dossiers"]
+    assert t.verrou_lot.acquire(blocking=False)                                   # un passage automatique tourne
+    try:
+        assert client.post("/api/migrer", json={"dossiers": lot}).status_code == 409
+        assert client.post("/api/dossier", json={"chemin": "Pense bete", "coche": False}).status_code == 409
+        with pytest.raises(Refus):
+            t.migrer(["Pense bete/Travaux"])
+    finally:
+        t.verrou_lot.release()
+    assert client.get("/api/arbre").json()["noeuds"]["Pense bete/Travaux"]["coche"]   # rien n'a changé
+    assert client.post("/api/dossier", json={"chemin": "Pense bete", "coche": False}).status_code == 200
+
+
+def test_093_le_lot_fait_passer_exactement_la_liste_verifiee(monde):
+    """Les dossiers donnés passent, et eux seuls ; une case décochée pendant ce temps ne change pas la liste figée."""
+    t, im, ids, photos = monde
+    t.regler_dossier("Pellicule/2020/2020-06-10", coche=True)
+    t.migrer(["Pellicule/2020/2020-06-10"])
+    assert t.base.un("SELECT etat FROM photos WHERE rel = ?", ("Pellicule/2020/2020-06-10/IMG_0003.jpg",))["etat"] == "prete"
+    assert t.base.un("SELECT etat FROM photos WHERE rel = ?", ("Pellicule/2020/2020-05-01 Fête au jardin/IMG_0002.jpg",))["etat"] == "vue"
+    assert not t.verrou_lot.locked()

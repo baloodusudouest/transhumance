@@ -72,13 +72,20 @@ class _LotInterrompu(Exception):
     """0.8.0 : le lot s'est arrêté en route (erreur déjà notée par migrer dans la tâche, montrée à l'écran)."""
 
 
-def _lot_suivi(dossiers: list[str] | None = None) -> None:
+def _lot_suivi(dossiers: list[str] | None = None, origine: str | None = None, verrou_pris: bool = False) -> None:
     """Un lot, suivi dans /health. migrer garde pour lui l'erreur d'un lot interrompu (dans t().tache["erreur"]) :
-    elle est relancée ici pour que le tour compte comme raté. Rien d'autre ne change."""
-    with maison.TACHES.tour(TACHE_LOT):
-        t().migrer(dossiers)
-        if t().tache.get("erreur"):
-            raise _LotInterrompu(t().tache["erreur"])
+    elle est relancée ici pour que le tour compte comme raté. 0.9.3 : le verrou du lot, pris par l'appelant, est passé
+    à migrer qui le rend ; s'il n'a pas pu y arriver, il est rendu ici."""
+    remis = False                                     # dès que migrer est appelé, c'est lui qui rend le verrou
+    try:
+        with maison.TACHES.tour(TACHE_LOT):
+            remis = True
+            t().migrer(dossiers, origine=origine, verrou_pris=verrou_pris)
+            if t().tache.get("erreur"):
+                raise _LotInterrompu(t().tache["erreur"])
+    finally:
+        if verrou_pris and not remis:
+            t().verrou_lot.release()
 
 
 def _boucle_auto() -> None:
@@ -87,10 +94,21 @@ def _boucle_auto() -> None:
         try:
             # 0.8.0 : le choix (rapide) est le tour de la boucle ; le passage (long) est suivi à part, comme un lot :
             # un passage de plusieurs heures ne fait pas croire à une boucle bloquée
-            with maison.TACHES.tour(TACHE_AUTO):
-                chemin = ETAT["t"].demande_suivante()
-            if chemin:
-                _lot_suivi([chemin])
+            # 0.9.3 : la boucle prend le verrou du lot avant de choisir : si « Faire passer » tourne, elle attend le
+            # tour suivant, et un clic pendant qu'elle choisit est refusé (409) au lieu de lancer un second lot
+            tr = ETAT["t"]
+            if not tr.verrou_lot.acquire(blocking=False):
+                continue
+            try:
+                with maison.TACHES.tour(TACHE_AUTO):
+                    chemin = tr.demande_suivante()
+            except BaseException:
+                tr.verrou_lot.release()
+                raise
+            if not chemin:
+                tr.verrou_lot.release()
+                continue
+            _lot_suivi([chemin], origine="Millésime", verrou_pris=True)
         except _LotInterrompu:
             pass                  # comme avant : l'erreur est dans la tâche, montrée à l'écran, et déjà au journal
         except Exception as exc:  # noqa: BLE001 — l'erreur est dans la tâche, montrée à l'écran
@@ -519,6 +537,9 @@ def regler_dossier(request: Request, corps: dict = Body(...)):
     chemin = str(corps.get("chemin", ""))
     if not chemin:
         raise HTTPException(422, "Dossier manquant.")
+    if t().tache["en_cours"] or t().verrou_lot.locked():
+        # 0.9.3 : un lot lit ses dossiers et leurs albums au départ ; les changer pendant qu'il tourne n'aurait aucun effet
+        raise HTTPException(409, "Un lot est en cours : les cases et les albums se changent quand il est fini.")
     t().regler_dossier(chemin, album=corps.get("album"), coche=corps.get("coche"), defaut=bool(corps.get("defaut")), vider=bool(corps.get("vider")))
     return arbre_vu(request)
 
@@ -530,22 +551,33 @@ def lot():
 
 
 @app.post("/api/migrer")
-def migrer():
-    """Lance le passage des dossiers cochés, en tâche de fond. Aucune suppression."""
+def migrer(corps: dict | None = Body(None)):
+    """Lance le passage des dossiers cochés, en tâche de fond. Aucune suppression.
+    0.9.3 : l'écran redonne la liste des dossiers qu'il montrait (« dossiers ») ; si les cases ont changé depuis
+    (écran périmé, case en cours d'enregistrement), rien ne part (409). Le lot fait passer exactement cette liste."""
     tr = t()
     tr.exiger_ecriture()
-    if tr.tache["en_cours"]:
+    vus = (corps or {}).get("dossiers")
+    if not isinstance(vus, list) or not all(isinstance(d, str) for d in vus):
+        raise HTTPException(422, "La liste des dossiers affichés manque : recharge la page.")
+    if tr.tache["en_cours"] or not tr.verrou_lot.acquire(blocking=False):
         raise HTTPException(409, "Un lot est déjà en cours.")
-    dossiers = tr.a_migrer()
-    if not dossiers:
-        raise HTTPException(422, "Aucun dossier coché.")
-    if not tr.verifier_place(dossiers)["possible"]:
-        raise HTTPException(409, "Pas assez de place libre pour ce lot.")
-    tr.tache.update(en_cours=True, erreur=None, message="Démarrage…", fait=0, total=0)
+    try:
+        dossiers = tr.a_migrer()
+        if not dossiers:
+            raise HTTPException(422, "Aucun dossier coché.")
+        if sorted(vus) != dossiers:
+            raise HTTPException(409, "Les cases ont changé depuis l'affichage : relis la liste avant de faire passer.")
+        if not tr.verifier_place(dossiers)["possible"]:
+            raise HTTPException(409, "Pas assez de place libre pour ce lot.")
+    except BaseException:
+        tr.verrou_lot.release()
+        raise
+    tr.tache.update(en_cours=True, erreur=None, message="Démarrage…", fait=0, total=0, origine=None, dossiers=len(dossiers))
 
     def faire():
         try:
-            _lot_suivi()                     # 0.8.0 : suivi dans /health (tâche à la demande « lot »)
+            _lot_suivi(dossiers, verrou_pris=True)   # 0.8.0 : suivi dans /health ; 0.9.3 : la liste vérifiée, figée
         except _LotInterrompu:
             pass                             # comme avant : l'erreur est déjà dans tr.tache, montrée à l'écran
         except Exception as exc:  # noqa: BLE001 — l'erreur est montrée à l'écran

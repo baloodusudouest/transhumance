@@ -31,8 +31,10 @@
     attente = ''
   }
   const inventaire = () => faire('inventaire', async () => { a = await api.post('/api/inventaire'); lot = await api.get('/api/lot') }, 'Immich et le dossier ont été relus.')
-  const regler = (chemin, corps) => faire('', async () => { a = await api.post('/api/dossier', { chemin, ...corps }); lot = await api.get('/api/lot') })
-  const migrer = () => faire('migrer', async () => { await api.post('/api/migrer'); await lire() })
+  // 0.9.3 : « dossier » (et non '') bloque « Faire passer » tant que la case n'est pas enregistrée et la liste relue
+  const regler = (chemin, corps) => faire('dossier', async () => { try { a = await api.post('/api/dossier', { chemin, ...corps }) } finally { lot = await api.get('/api/lot') } })
+  // 0.9.3 : l'écran redonne la liste qu'il montre ; si les cases ont changé entre-temps, le serveur refuse (409)
+  const migrer = () => faire('migrer', async () => { try { await api.post('/api/migrer', { dossiers: lot?.dossiers || [] }) } finally { await lire() } })
   const voirBilan = (chemin) => faire('bilan', async () => { bilan = await api.get('/api/bilan?chemin=' + encodeURIComponent(chemin)); confirme = false })
   const accepter = (e, oui) => faire('', async () => { await api.post('/api/accepter', { ancien: e.ancien, oui }); await voirBilan(bilan.chemin) })
   // 0.1.8 : pendant que le clic travaille, l'écran relit l'avancement chaque seconde
@@ -88,7 +90,7 @@
       {a.inventaire ? `Dernière lecture le ${quand(a.inventaire.le)} : ${a.inventaire.photos} photos et vidéos dans la bibliothèque externe, ${a.inventaire.inconnus ?? '(parcours du dossier non terminé)'} fichier(s) qu'Immich ne connaît pas.` : 'Commence par relire Immich et le dossier.'}
       Faire passer ne supprime rien.</p>
     {#if tache.en_cours}
-      <p class="mt-2 text-sm" role="status" id="tache">{tache.message} {tache.total ? `(${tache.fait} / ${tache.total})` : ''}</p>
+      <p class="mt-2 text-sm" role="status" id="tache">{tache.message} {tache.total ? `(${tache.fait} / ${tache.total})` : ''}{tache.dossiers ? ` · lot de ${tache.dossiers} dossier(s)` : ''}</p>
     {:else if tache.erreur}
       <p class="mt-2 text-sm font-medium" role="alert">Lot interrompu : {tache.erreur}</p>
     {:else if tache.message}<p class="mt-2 text-sm" role="status" id="tache">{tache.message}</p>{/if}
@@ -100,7 +102,7 @@
              onchange={(e) => faire('auto', async () => { a = await api.post('/api/auto-demandes', { oui: e.currentTarget.checked }) },
                                     e.currentTarget.checked ? 'Les dossiers demandés par Millésime passeront tout seuls.' : 'Passage automatique coupé.')} />
       <span><strong>Faire passer tout seuls les dossiers demandés par Millésime</strong>
-        <span class="block text-sm text-muted-foreground">Dès qu'un dossier est entièrement daté dans Millésime, il est envoyé et contrôlé ici, un à la fois, quand aucun lot ne tourne. Les originaux ne sont jamais supprimés sans ton clic, après le bilan.</span></span>
+        <span class="block text-sm text-muted-foreground">Dès qu'un dossier coché est entièrement daté dans Millésime, il est envoyé et contrôlé ici, un à la fois, quand aucun lot ne tourne. Un dossier décoché garde sa demande et attend. Les originaux ne sont jamais supprimés sans ton clic, après le bilan.</span></span>
     </label>
   </section>
   {#if message}<p class="mb-3 text-sm" role="status" id="message">{message}</p>{/if}
@@ -201,7 +203,7 @@
       <!-- Case pleine : tout ce dossier est coché. Case barrée d'un trait : une partie seulement, dans ses sous-dossiers.
            Décocher une case qu'on avait remplie depuis un choix partiel rend ce choix (0.1.3). -->
       <input type="checkbox" class="size-5 flex-none accent-[var(--app)]" checked={n.selection === 'tout'} indeterminate={n.selection === 'partiel'}
-             disabled={n.exclu || tache.en_cours || !n.a_cocher}
+             disabled={n.exclu || tache.en_cours || attente === 'dossier' || !n.a_cocher}
              aria-label={'Cocher ' + n.nom} aria-checked={n.selection === 'partiel' ? 'mixed' : n.selection === 'tout'}
              title={n.selection === 'partiel' ? `${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : n.souvenir ? `Décocher revient aux ${n.souvenir} sous-dossier(s) cochés avant` : ''}
              onchange={(e) => regler(n.chemin, { coche: n.selection === 'partiel' ? true : e.currentTarget.checked })} />

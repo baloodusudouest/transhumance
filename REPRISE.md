@@ -2,8 +2,9 @@
 
 À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`.
 
-## Où on en est (20/11/2026)
+## Où on en est (21/11/2026)
 
+- **0.9.3 (21/11/2026)** : rien ne part sans être coché. `POST /api/migrer` exige la liste affichée (`dossiers`) et refuse si elle a changé (409) ; le lot passe cette liste figée. `Transhumance.verrou_lot` : un seul lot à la fois (pris par `/api/migrer` ou `_boucle_auto` avant le choix, passé à `migrer(…, verrou_pris=True)` qui le rend). `/api/dossier` refusé pendant un lot. `demande_suivante` ne prend une demande que si son dossier est coché. `tache` porte `origine` et `dossiers`. Tests `test_093_…`. Cause : bug vu le 21/11 (Pellicule décochée envoyée). **Jamais essayé sur la vraie installation.**
 - **0.9.2 (20/11/2026)** : copies communes du socle 0.11.1 (titre « Pour le relier » quand le réglage est dans l'appli).
 - **0.9.1** (20/11/2026) : la fiche de la reconnaissance d'Immich a l'id commun `immich-ml` (au lieu de `pc-calcul`, réservé au calculateur de Millésime et au PC de Scriptorium). **Jamais essayé sur la vraie installation.**
 - **0.9.0** (20/11/2026) : fiches « Connexion » communes (contrat 3, socle 0.11.0). `app/main.py`, section « fiches Connexion » : `SERVICES` = `immich` (essai : version et place libre) et `pc-calcul`, `immich-ml` en 0.9.1 (essai : `Transhumance.reconnaissance()`, guide `_guide_pc` tiré de `ETAT["reconnaissance"]`, aucun appel au GET) ; `maison.monter_services` après la garde. `/api/reconnaissance` et `/api/connexions` notent leurs lectures (`SERVICES.noter`). Écran : `$lib/services/Services.svelte` (commun, ne jamais le retoucher : empreinte testée) ; dossier des photos dans `Reglages.svelte` ; `Reconnaissance.svelte` = ligne courte de Migrer seulement. Partie `immich` de `/api/connexions` à retirer en 0.10.0. Tests : `tests/test_fiches_connexion.py`. **Jamais essayé sur la vraie installation.**
@@ -44,6 +45,7 @@
 
 ## Ce qu'il ne faut pas casser
 
+- 0.9.3 : rien ne part sans être coché. `test_093_…` figent la liste affichée redonnée par l'écran, le verrou d'un seul lot, et les demandes de Millésime qui attendent la case.
 - `test_supprimer_ne_supprime_que_ce_qui_est_prouve` fige ce que le clic fait.
 - Au moment de supprimer, la copie est relue dans Immich et le fichier re-haché : rien ne part sur la foi d'un bilan ancien.
 - Un fichier qu'Immich ne connaît pas n'est jamais touché ; un dossier n'est jamais supprimé.

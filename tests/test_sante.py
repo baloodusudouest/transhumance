@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import time
 
+import threading
+
 import pytest
 
 from app import main, maison
@@ -60,15 +62,18 @@ class _FauxPassage:
         self.choix, self.rate_choix, self.erreur_lot = choix, rate_choix, erreur_lot
         self.tache = {"en_cours": False, "erreur": None}
         self.passes = []
+        self.verrou_lot = threading.Lock()                # 0.9.3 : un seul lot à la fois
 
     def demande_suivante(self):
         if self.rate_choix:
             raise RuntimeError("base illisible")
         return self.choix
 
-    def migrer(self, dossiers=None):
+    def migrer(self, dossiers=None, origine=None, verrou_pris=False):
         self.passes.append(dossiers)
         self.tache["erreur"] = self.erreur_lot            # comme le vrai : l'erreur reste dans la tâche
+        if verrou_pris:
+            self.verrou_lot.release()                     # comme le vrai : migrer rend le verrou qu'on lui passe
 
 
 def _un_tour(monkeypatch, faux):
@@ -93,7 +98,7 @@ def test_un_tour_rate_met_la_boucle_en_retard(monkeypatch):
 def test_un_lot_interrompu_passe_en_erreur_sans_bloquer_la_boucle(monkeypatch):
     faux = _FauxPassage(choix="Pellicule/2020/inventé", erreur_lot="Immich injoignable")
     etat = _un_tour(monkeypatch, faux)
-    assert faux.passes == [["Pellicule/2020/inventé"]]
+    assert faux.passes == [["Pellicule/2020/inventé"]] and not faux.verrou_lot.locked()   # 0.9.3 : verrou rendu
     assert etat["passage-auto"]["etat"] == "ok"                       # le choix a marché : la boucle vit
     assert etat["lot"]["etat"] == "erreur" and "Immich injoignable" in etat["lot"]["message"]
     faux.erreur_lot = None
