@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 0.9.5 — 22 novembre 2026 (barre d'onglets collée en bas)
+- **iPhone : barre d'onglets collée au bord bas**, sur toute la largeur, au lieu de la pilule flottante (demande de Julien, 22/11/2026, pour toutes les applis maison ; socle 0.12.1). Le rail des PC ne change pas.
+- **Jamais essayé sur la vraie installation.**
+
 ## 0.9.4 — 21 novembre 2026 (la case d'un dossier se vide d'un clic)
 - **Vu sur la vraie installation le 21/11/2026** : cocher la Pellicule donnait une case barrée, puis pleine, puis de nouveau barrée, sans jamais revenir à vide. Deux causes :
   - les **dossiers finis** (tous les originaux supprimés) étaient comptés dans la case du parent, mais toujours remis à « décoché » : la case de la Pellicule ne pouvait pas être pleine ;

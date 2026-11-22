@@ -59,3 +59,5 @@
 - La vignette d'une personne qui pointait sur une ancienne photo n'est pas repointée.
 - Pas de contrôle « aucune personne nouvelle » après un lot.
 - Interface pensée pour le PC.
+## État (22/11/2026) — 0.9.5 : barre d'onglets collée en bas sur iPhone (`App.svelte`, classes du socle 0.12.1 : `fixed inset-x-0 bottom-0 … pb-[calc(0.375rem+env(safe-area-inset-bottom))]`, `md:right-auto md:justify-start`). Jamais essayé sur la vraie installation.
+
