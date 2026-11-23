@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 0.9.6 — 23 novembre 2026 (un fichier refusé par Immich ne bloque plus le dossier)
+- **Vu sur la vraie installation le 23/11/2026** : un seul fichier refusé par Immich à l'envoi (écart « refusé », « Ne s'accepte pas ») laissait tout le dossier « Pas encore supprimable ». Cause : dans `bilan()`, `en_attente` comptait toute photo dont un écart est bloquant, même si elle ne serait jamais supprimée.
+- **Correctif** : un fichier refusé reste dans le dossier, comme un fichier qu'Immich ne connaît pas : jamais supprimé (il ne s'accepte toujours pas), mais il n'empêche plus de supprimer les photos prêtes. Les écarts `empreinte`, `copie_absente` et `introuvable` bloquent toujours.
+- Bilan : nombre de fichiers refusés (`refuses`), phrase « … refusé(s) par Immich (ils resteront dans le dossier, sans bloquer les autres) », ligne de l'écart « Reste dans le dossier, jamais supprimé ; n'empêche pas de supprimer les autres », message « Pas encore supprimable » précisé. Un dossier dont il ne reste que des fichiers refusés est « Terminé » et n'a plus de case.
+- Tests : `test_073` adapté, `test_096_…` (deux) ; 63 tests serveur et 7 tests d'écran passent.
+- **Jamais essayé sur la vraie installation.**
+
 ## 0.9.5 — 22 novembre 2026 (barre d'onglets collée en bas)
 - **iPhone : barre d'onglets collée au bord bas**, sur toute la largeur, au lieu de la pilule flottante (demande de Julien, 22/11/2026, pour toutes les applis maison ; socle 0.12.1). Le rail des PC ne change pas.
 - **Jamais essayé sur la vraie installation.**

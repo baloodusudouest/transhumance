@@ -32,7 +32,8 @@ ACCOMPAGNEMENTS = (".xmp",)
 ECARTS = {
     "empreinte": ("La copie rangée par Immich n'est pas identique au fichier d'origine.", True),
     "introuvable": ("Le fichier d'origine n'est plus dans le dossier.", True),
-    "refuse": ("Immich a refusé ce fichier à l'envoi (fichier abîmé ou format refusé) : il reste en place.", True),
+    "refuse": ("Immich a refusé ce fichier à l'envoi (fichier abîmé ou format refusé) : il reste dans le dossier, "
+               "jamais supprimé, et n'empêche pas de supprimer les autres.", True),
     "copie_absente": ("Immich n'a plus la copie.", True),
     "date": ("La date de la copie n'est pas celle de l'ancienne photo.", False),
     "visage": ("Des personnes nommées sur l'ancienne photo ne le sont pas sur la copie.", False),
@@ -40,6 +41,17 @@ ECARTS = {
     "tag": ("Un tag de l'ancienne photo n'a pas pu être reporté sur la copie : Immich le refuse.", False),
     "description": ("La description ou la note de l'ancienne photo n'a pas pu être reportée sur la copie.", False),
 }
+
+
+# 0.9.6 : écarts d'un fichier qui reste dans le dossier sans bloquer les autres (comme un fichier qu'Immich ne connaît
+# pas) : jamais supprimé (bloquant ci-dessus), mais le dossier reste supprimable pour ses photos prêtes.
+RESTENT = {"refuse"}
+
+
+def reste_seulement(l) -> bool:
+    """Vrai pour une photo en écart dont tous les écarts la font seulement rester dans le dossier (refusée par Immich)."""
+    ecarts = set(json.loads(l["ecarts"] or "[]"))
+    return l["etat"] == "ecart" and bool(ecarts) and ecarts <= RESTENT
 
 
 class Refus(Exception):
@@ -259,8 +271,11 @@ class Transhumance:
 
     def _finis(self) -> set[str]:
         """0.9.4 : dossiers dont tous les originaux sont supprimés. Ils n'ont plus de case : ni cochés, ni comptés."""
+        # 0.9.6 : un fichier refusé par Immich qui reste dans le dossier ne l'empêche pas d'être fini
         return {l["dossier"] for l in self.base.tous(
-            "SELECT dossier FROM photos GROUP BY dossier HAVING SUM(etat != 'supprimee') = 0")}
+            "SELECT dossier FROM photos GROUP BY dossier "
+            "HAVING SUM(etat != 'supprimee' AND NOT (etat = 'ecart' AND ecarts = '[\"refuse\"]')) = 0 "
+            "AND SUM(etat = 'supprimee') > 0")}
 
     def _exclu(self, dossier: str) -> bool:
         return PurePosixPath(dossier).parts[:1] in [(x,) for x in self.exclus()]
@@ -729,28 +744,35 @@ class Transhumance:
             for e in json.loads(l["ecarts"]):
                 perdus = sorted({v.get("nom") or "une personne sans nom" for v in inst.get("visages", []) if v.get("personne")}) if e == "visage" else []
                 ecarts.append({"ancien": l["ancien_id"], "nouveau": l["nouveau_id"], "fichier": l["rel"], "sorte": e,
-                               "phrase": ECARTS[e][0], "bloquant": ECARTS[e][1], "accepte": bool(l["accepte"]), "personnes": perdus})
+                               "phrase": ECARTS[e][0], "bloquant": ECARTS[e][1], "accepte": bool(l["accepte"]), "personnes": perdus,
+                               "reste": e in RESTENT})   # 0.9.6 : reste dans le dossier sans bloquer la suppression
         inconnus = sum(r["inconnus"] for r in self.base.tous("SELECT chemin, inconnus FROM dossiers")
                        if chemin in (".", "") or r["chemin"] == chemin or r["chemin"].startswith(chemin + "/"))
         # 0.7.1 : la partie vidéo d'une photo animée (cachée) compte aussi : son écart bloque la suppression
-        en_attente = [l for l in photos if l["etat"] == "ecart" and (not l["accepte"] or any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
+        # 0.9.6 : un fichier refusé par Immich reste dans le dossier et ne bloque plus les autres (constaté le 23/11/2026)
+        refuses = [l for l in visibles if reste_seulement(l)]
+        en_attente = [l for l in photos if l["etat"] == "ecart" and not reste_seulement(l)
+                      and (not l["accepte"] or any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
         pretes = [l for l in visibles if l["etat"] == "prete" or (l["etat"] == "ecart" and l["accepte"] and not any(ECARTS[e][1] for e in json.loads(l["ecarts"])))]
         supprimes = etats.get("supprimee", 0)
-        termine = bool(visibles) and supprimes == len(visibles)
+        termine = bool(visibles) and supprimes > 0 and supprimes + len(refuses) == len(visibles)
         return {
             "termine": termine, "supprimes": supprimes,
             "chemin": chemin, "fichiers": len(visibles), "etats": etats, "deja_la": deja, "visages": visages, "ecarts": ecarts,
-            "inconnus": inconnus, "a_supprimer": len(pretes),
+            "inconnus": inconnus, "a_supprimer": len(pretes), "refuses": len(refuses),
             "fichiers_inconnus": [l["rel"] for l in (self.base.tous("SELECT rel FROM inconnus ORDER BY rel LIMIT 300") if chemin in (".", "")
                                   else self.base.tous("SELECT rel FROM inconnus WHERE dossier = ? OR substr(dossier, 1, ?) = ? ORDER BY rel LIMIT 300",
                                                       (chemin, len(chemin) + 1, chemin + "/")))],
             "supprimable": bool(pretes) and not en_attente and not etats.get("vue") and not etats.get("envoyee"),
             "phrase": f"Terminé : les {supprimes} photos et vidéos de ce dossier sont dans le stockage d'Immich, et leurs originaux sont supprimés."
+                      + (f" {len(refuses)} fichier(s) refusé(s) par Immich sont restés dans le dossier." if refuses else "")
                       + (f" {inconnus} fichier(s) qu'Immich ne connaît pas sont restés dans le dossier." if inconnus else "")
                       if termine else
                       f"{len(visibles)} fichiers dans ce dossier ; {len(pretes) + supprimes} retrouvés identiques dans Immich"
                       + (f" (dont {supprimes} aux originaux déjà supprimés)" if supprimes else "") + " ; "
                       f"{len(en_attente)} avec un écart à régler ; "
+                      + (f"{len(refuses)} refusé(s) par Immich (ils resteront dans le dossier, sans bloquer les autres) ; " if refuses else "")
+                      + ""
                       + (f"{etats['envoyee']} envoyés, pas encore contrôlés ; " if etats.get("envoyee") else "")
                       + f"{etats.get('vue', 0)} pas encore envoyés ; "
                       f"{inconnus} qu'Immich ne connaît pas (ils resteront dans le dossier).",

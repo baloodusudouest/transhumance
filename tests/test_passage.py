@@ -674,7 +674,44 @@ def test_073_un_fichier_refuse_ne_bloque_pas_le_lot(monde):
     t.migrer()
     e = etats(t)
     assert e["IMG_0001.jpg"] == "ecart" and e["IMG_0002.jpg"] == "prete" and e["IMG_0003.jpg"] == "prete"
-    assert not t.bilan("Pellicule/2020")["supprimable"]          # l'écart « refusé » est bloquant
+    # 0.9.6 : le fichier refusé ne s'accepte pas, mais il ne bloque plus le dossier (constaté le 23/11/2026)
+    b = t.bilan("Pellicule/2020")
+    assert b["supprimable"] and b["refuses"] == 1 and b["a_supprimer"] == 2
+    ec = next(x for x in b["ecarts"] if x["sorte"] == "refuse")
+    assert ec["bloquant"] and ec["reste"] and "n'empêche pas" in ec["phrase"]
+    assert "refusé(s) par Immich" in b["phrase"]
+
+
+def test_096_un_dossier_avec_un_fichier_refuse_se_supprime_et_le_fichier_reste(monde):
+    """0.9.6 : un fichier refusé par Immich et des photos prêtes : le dossier est supprimable ; les photos prêtes sont
+    supprimées, le fichier refusé reste dans le dossier, le dossier est « terminé » et n'a plus de case."""
+    t, im, ids, photos = monde
+    im.refuser.add("IMG_0001.jpg")
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    with pytest.raises(Exception):
+        t.accepter(next(l["ancien_id"] for l in t.base.tous("SELECT ancien_id, rel FROM photos") if l["rel"].endswith("IMG_0001.jpg")))
+    r = t.supprimer("Pellicule/2020")
+    assert r["supprimes"] == 2
+    e = etats(t)
+    assert e["IMG_0001.jpg"] == "ecart" and e["IMG_0002.jpg"] == e["IMG_0003.jpg"] == "supprimee"
+    restants = {p.name for p in photos.rglob("*.jpg")}
+    assert "IMG_0001.jpg" in restants and not {"IMG_0002.jpg", "IMG_0003.jpg"} & restants
+    b = t.bilan("Pellicule/2020")
+    assert b["termine"] and "refusé(s) par Immich sont restés" in b["phrase"]
+    dossier = t.base.un("SELECT dossier FROM photos WHERE rel LIKE ?", ("%IMG_0001.jpg",))["dossier"]
+    assert dossier in t._finis()                                   # plus de case pour ce dossier
+
+
+def test_096_un_autre_ecart_bloquant_bloque_toujours(monde):
+    """0.9.6 : empreinte, copie absente et fichier introuvable bloquent toujours le dossier."""
+    t, im, ids, photos = monde
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    l = next(l for l in t.base.tous("SELECT ancien_id, rel FROM photos") if l["rel"].endswith("IMG_0002.jpg"))
+    for sorte in ("empreinte", "copie_absente", "introuvable"):
+        t._etat(l["ancien_id"], "ecart", [sorte])
+        assert not t.bilan("Pellicule/2020")["supprimable"], sorte
 
 
 def test_m32_deconnexion_gardee_apres_redemarrage_et_connexions_n_ecrit_rien(client):

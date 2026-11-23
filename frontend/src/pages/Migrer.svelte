@@ -125,7 +125,8 @@
             <li class="flex flex-wrap items-center justify-between gap-2 py-2">
               <span class="min-w-0"><span class="block break-all font-medium">{e.fichier}</span>
                 <span class="block">{e.phrase}{e.personnes.length ? ` Concernées : ${e.personnes.join(', ')}.` : ''}</span>
-                {#if e.bloquant}<span class="block text-muted-foreground">Ne s'accepte pas : l'original reste en place quoi qu'il arrive.</span>{/if}</span>
+                {#if e.reste}<span class="block text-muted-foreground">Reste dans le dossier, jamais supprimé ; n'empêche pas de supprimer les autres.</span>
+                {:else if e.bloquant}<span class="block text-muted-foreground">Ne s'accepte pas : l'original reste en place quoi qu'il arrive.</span>{/if}</span>
               {#if !e.bloquant}
                 <Button variant="outline" onclick={() => accepter(e, !e.accepte)}>{e.accepte ? 'Accepté — revenir dessus' : 'J\'accepte cette perte'}</Button>
               {/if}
@@ -172,7 +173,7 @@
             </div>
           {/if}
         {:else}
-          <p class="text-sm">Pas encore supprimable : {bilan.a_supprimer ? (tache.en_cours ? 'le contrôle est en cours, reviens quand le lot est fini.' : bilan.etats.envoyee ? 'des photos envoyées attendent leur contrôle : relance « Faire passer ».' : 'un écart reste à régler, ou des photos ne sont pas passées.') : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
+          <p class="text-sm">Pas encore supprimable : {bilan.a_supprimer ? (tache.en_cours ? 'le contrôle est en cours, reviens quand le lot est fini.' : bilan.etats.envoyee ? 'des photos envoyées attendent leur contrôle : relance « Faire passer ».' : 'un écart reste à régler (copie différente, absente ou fichier introuvable), ou des photos ne sont pas passées. Un fichier refusé par Immich ne bloque pas : il reste dans le dossier.') : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
         {/if}
         {#if (bilan.etats.prete || 0) + (bilan.etats.ecart || 0) + (bilan.etats.envoyee || 0)}
           <div class="mt-3"><Button variant="outline" class="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left" onclick={defaire} disabled={!!attente || tache.en_cours || lectureSeule}>Défaire ce dossier (retirer les copies d'Immich)</Button></div>
