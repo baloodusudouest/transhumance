@@ -55,6 +55,9 @@
   function basculer(chemin) {
     const s = new Set(ouverts); s.has(chemin) ? s.delete(chemin) : s.add(chemin); ouverts = s
   }
+  // 0.9.7 : la taille montrée est ce qui reste sur le NAS ; les originaux supprimés n'y pèsent plus
+  const taille = (n) => !(n.etats.supprimee || 0) ? poids(n.poids)
+    : n.restants ? `${poids(n.poids_restant)} encore sur le NAS (${poids(n.poids)} au départ)` : `plus rien sur le NAS (${poids(n.poids)} au départ)`
   const resume = (n) => Object.entries(n.etats).filter(([, v]) => v).map(([k, v]) => `${v} ${ETATS[k] || k}`).join(' · ')
   // 0.1.7 : un dossier fini (tous ses originaux supprimés) quitte l'arbre ; un lien le remontre
   let voirFinis = $state(false)
@@ -210,7 +213,7 @@
              onchange={(e) => regler(n.chemin, { coche: n.selection === 'partiel' ? true : e.currentTarget.checked })} />
       <span class="min-w-0 flex-1">
         <span class="block truncate font-medium">{n.nom}{#if n.exclu}&nbsp;<span class="font-normal text-muted-foreground">· jamais migré</span>{/if}{#if n.demande}&nbsp;<span class="demande" title={'Demandé le ' + quand(n.demande.le)}>demandé par {n.demande.de}</span>{/if}</span>
-        <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {poids(n.poids)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}{n.selection === 'partiel' ? ` · ${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}{#if n.selection === 'partiel' && !tache.en_cours}&nbsp;· <button type="button" class="underline underline-offset-2 hover:text-foreground" aria-label={'Tout décocher dans ' + n.nom} onclick={() => regler(n.chemin, { coche: false, vider: true })}>tout décocher</button>{/if}</span>
+        <span class="block truncate text-[0.82rem] text-muted-foreground">{n.photos} photo(s){n.videos ? `, ${n.videos} vidéo(s)` : ''} · {taille(n)}{resume(n) ? ' · ' + resume(n) : ''}{n.inconnus ? ` · ${n.inconnus} inconnu(s) d'Immich` : ''}{n.selection === 'partiel' ? ` · ${n.coches} sous-dossier(s) cochés sur ${n.a_cocher}` : ''}{#if n.selection === 'partiel' && !tache.en_cours}&nbsp;· <button type="button" class="underline underline-offset-2 hover:text-foreground" aria-label={'Tout décocher dans ' + n.nom} onclick={() => regler(n.chemin, { coche: false, vider: true })}>tout décocher</button>{/if}</span>
       </span>
       {#if n.ici && !n.exclu}
         <input class="album" aria-label={'Album pour ' + n.nom} placeholder="pas d'album" value={n.album || ''} disabled={tache.en_cours}

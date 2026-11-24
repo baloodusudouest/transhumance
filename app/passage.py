@@ -370,6 +370,8 @@ class Transhumance:
                 r = reglages.get(chemin)
                 noeuds[chemin] = {"chemin": chemin, "nom": PurePosixPath(chemin).name or "Photos", "enfants": [],
                                   "photos": 0, "videos": 0, "poids": 0, "etats": {}, "ici": 0,
+                                  # 0.9.7 : ce qui est encore dans le dossier du NAS (tout sauf les originaux supprimés)
+                                  "restants": 0, "poids_restant": 0,
                                   "inconnus": r["inconnus"] if r else 0, "coche": bool(r and r["coche"]),
                                   "exclu": self._exclu(chemin), "propose": self.album_propose(chemin),
                                   "album": self.album_de(chemin), "demande": demandes.get(chemin)}
@@ -387,6 +389,9 @@ class Transhumance:
                 p = noeud(c)
                 p["videos" if l["type"] == "VIDEO" else "photos"] += l["n"]
                 p["poids"] += l["poids"] or 0
+                if l["etat"] != "supprimee":
+                    p["restants"] += l["n"]
+                    p["poids_restant"] += l["poids"] or 0
                 p["etats"][l["etat"]] = p["etats"].get(l["etat"], 0) + l["n"]
                 if c in (".", ""):
                     break

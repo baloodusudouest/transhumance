@@ -793,3 +793,25 @@ def test_093_le_lot_fait_passer_exactement_la_liste_verifiee(monde):
     assert t.base.un("SELECT etat FROM photos WHERE rel = ?", ("Pellicule/2020/2020-06-10/IMG_0003.jpg",))["etat"] == "prete"
     assert t.base.un("SELECT etat FROM photos WHERE rel = ?", ("Pellicule/2020/2020-05-01 Fête au jardin/IMG_0002.jpg",))["etat"] == "vue"
     assert not t.verrou_lot.locked()
+
+
+# ------------------------------------------------------------------ 0.9.7 : la taille montrée est ce qui reste sur le NAS
+def test_097_l_arbre_compte_ce_qui_reste_sur_le_nas(monde):
+    """Vu le 24/11/2026 : « Photos » montrait encore 219,3 Go après la suppression de presque toute la Pellicule.
+    Les comptes de l'arbre gardaient les originaux supprimés ; `restants` et `poids_restant` ne les comptent plus,
+    jusqu'à la racine. `photos`, `videos` et `poids` restent le total de départ (l'avancement s'en sert)."""
+    t, im, ids, photos = monde
+    t.base.executer("UPDATE photos SET taille = 1000")
+    im.refuser.add("IMG_0001.jpg")
+    avant = t.arbre()["noeuds"]
+    assert avant["."]["restants"] == avant["."]["photos"] + avant["."]["videos"]
+    assert avant["."]["poids_restant"] == avant["."]["poids"]
+    t.regler_dossier("Pellicule/2020", coche=True)
+    t.migrer()
+    assert t.supprimer("Pellicule/2020")["supprimes"] == 2
+    n = t.arbre()["noeuds"]
+    for c in ("Pellicule/2020", "Pellicule", "."):
+        assert n[c]["poids"] == avant[c]["poids"], c                   # le total de départ ne bouge pas
+        assert n[c]["restants"] == avant[c]["restants"] - 2, c         # les deux originaux supprimés ne comptent plus
+        assert n[c]["poids_restant"] == avant[c]["poids_restant"] - 2000, c
+    assert n["Pellicule/2020"]["restants"] == 1                        # le fichier refusé reste dans le dossier

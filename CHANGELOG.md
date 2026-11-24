@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 0.9.7 — 24 novembre 2026 (la taille d'un dossier est ce qui reste sur le NAS)
+- **Vu sur la vraie installation le 24/11/2026** : après la suppression de presque toute la Pellicule (31 510 originaux), la ligne « Photos » montrait encore 40 931 photos, 2 833 vidéos et 219,3 Go. Cause : dans `arbre()`, les comptes et le poids additionnaient toutes les photos de la base, originaux supprimés compris (état `supprimee`). Rien n'était faux sur le NAS, seulement à l'écran.
+- **Correctif** : chaque nœud de l'arbre porte `restants` et `poids_restant` (tout sauf `supprimee`, fichiers refusés compris), remontés jusqu'à la racine. `photos`, `videos` et `poids` restent le total de départ (l'avancement et « fini » s'en servent).
+- Écran (`Migrer.svelte`) : un dossier dont des originaux sont supprimés affiche « X encore sur le NAS (Y au départ) », ou « plus rien sur le NAS (Y au départ) ».
+- La place réelle sur le NAS ne revient qu'une fois la corbeille du dossier partagé vidée, si la corbeille Synology est activée.
+- Tests : `test_097_l_arbre_compte_ce_qui_reste_sur_le_nas` ; 64 tests serveur passent, l'écran se construit.
+- **Jamais essayé sur la vraie installation.**
+
 ## 0.9.6 — 23 novembre 2026 (un fichier refusé par Immich ne bloque plus le dossier)
 - **Vu sur la vraie installation le 23/11/2026** : un seul fichier refusé par Immich à l'envoi (écart « refusé », « Ne s'accepte pas ») laissait tout le dossier « Pas encore supprimable ». Cause : dans `bilan()`, `en_attente` comptait toute photo dont un écart est bloquant, même si elle ne serait jamais supprimée.
 - **Correctif** : un fichier refusé reste dans le dossier, comme un fichier qu'Immich ne connaît pas : jamais supprimé (il ne s'accepte toujours pas), mais il n'empêche plus de supprimer les photos prêtes. Les écarts `empreinte`, `copie_absente` et `introuvable` bloquent toujours.

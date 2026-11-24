@@ -2,7 +2,9 @@
 
 À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`.
 
-## Où on en est (23/11/2026)
+## Où on en est (24/11/2026)
+
+- **0.9.7 (24/11/2026)** : la taille d'un dossier est ce qui reste sur le NAS. `arbre()` (`app/passage.py`) ajoute `restants` et `poids_restant` à chaque nœud (tout sauf `supprimee`, remonté jusqu'à la racine) ; `photos`/`videos`/`poids` restent le total de départ (`fini`, `avance` de `Migrer.svelte` s'en servent). Écran : `taille(n)` dans `Migrer.svelte`. Test `test_097_…`. Cause : 219,3 Go encore affichés le 24/11 après la suppression de la Pellicule. **Jamais essayé sur la vraie installation.**
 
 - **0.9.6 (23/11/2026)** : un fichier refusé par Immich (écart `refuse`) ne bloque plus le dossier. `RESTENT = {"refuse"}` et `reste_seulement(l)` dans `app/passage.py` ; `bilan()` : `refuses`, `en_attente` sans eux, `termine` = supprimées + refusées, champ `reste` sur l'écart ; `_finis()` compte les dossiers dont il ne reste que des fichiers refusés. `eligible()` (suppression) inchangé : un écart bloquant n'est jamais supprimé. `Migrer.svelte` : ligne de l'écart et message « Pas encore supprimable ». Tests `test_096_…`. Cause : vu le 23/11/2026 sur un vrai dossier. **Jamais essayé sur la vraie installation.**
 
