@@ -393,7 +393,7 @@ def test_lecture_seule_n_envoie_rien_et_ne_supprime_rien(monde):
 def client(monde):
     t, im, ids, photos = monde
     main.ETAT.clear()
-    main.ETAT.update(cfg=t.cfg, t=t)
+    main.ETAT.update(cfg=t.cfg, t=t, encodeur_nas=False)
     with TestClient(main.app) as c:
         c.monde = monde
         yield c
@@ -451,7 +451,7 @@ def test_parcours_par_l_api(client):
     r = client.post("/api/supprimer", json={"chemin": "Pense bete", "nombre": 1}).json()
     assert r["supprimes"] == 1 and not (photos / "Pense bete/Travaux/note.jpg").exists()
     c = client.get("/api/connexions").json()
-    assert c["immich"]["version"] == "3.4.1" and c["dossier"]["inscriptible"] and c["dossier"]["exclus"] == ["Scans"]
+    assert "immich" not in c and c["dossier"]["inscriptible"]          # 0.10.0 : partie « immich » retirée and c["dossier"]["exclus"] == ["Scans"]
     assert client.get("/api/bilan", params={"chemin": "../.."}).json()["fichiers"] == 0
 
 
@@ -679,7 +679,7 @@ def test_073_un_fichier_refuse_ne_bloque_pas_le_lot(monde):
     assert b["supprimable"] and b["refuses"] == 1 and b["a_supprimer"] == 2
     ec = next(x for x in b["ecarts"] if x["sorte"] == "refuse")
     assert ec["bloquant"] and ec["reste"] and "n'empêche pas" in ec["phrase"]
-    assert "refusé(s) par Immich" in b["phrase"]
+    assert "laissé(s) dans le dossier (refusés par Immich" in b["phrase"]          # 0.10.0 : phrase élargie (sans image, MP4 impossible)
 
 
 def test_096_un_dossier_avec_un_fichier_refuse_se_supprime_et_le_fichier_reste(monde):
@@ -698,7 +698,7 @@ def test_096_un_dossier_avec_un_fichier_refuse_se_supprime_et_le_fichier_reste(m
     restants = {p.name for p in photos.rglob("*.jpg")}
     assert "IMG_0001.jpg" in restants and not {"IMG_0002.jpg", "IMG_0003.jpg"} & restants
     b = t.bilan("Pellicule/2020")
-    assert b["termine"] and "refusé(s) par Immich sont restés" in b["phrase"]
+    assert b["termine"] and "laissé(s) dans le dossier (refusés par Immich" in b["phrase"]   # 0.10.0 : phrase élargie
     dossier = t.base.un("SELECT dossier FROM photos WHERE rel LIKE ?", ("%IMG_0001.jpg",))["dossier"]
     assert dossier in t._finis()                                   # plus de case pour ce dossier
 
@@ -727,7 +727,7 @@ def test_m32_deconnexion_gardee_apres_redemarrage_et_connexions_n_ecrit_rien(cli
     assert (t.cfg.data / "session_generation").read_text() == "1"
     # Redémarrage : nouvelles sessions, lues dans /data ; le cookie d'avant la déconnexion ne vaut plus
     main.ETAT.clear()
-    main.ETAT.update(cfg=t.cfg, t=t)
+    main.ETAT.update(cfg=t.cfg, t=t, encodeur_nas=False)
     with TestClient(main.app) as c:
         assert main.ETAT["sessions"].generation == 1
         c.cookies.set("transhumance_session", vieux)

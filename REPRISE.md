@@ -1,8 +1,17 @@
 # Reprise — Transhumance
 
-À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`.
+À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`. 0.10.0 : `docs/dossier-0.10.0.md`, `docs/conseil-0.10.0.md`.
 
-## Où on en est (24/11/2026)
+## Où on en est (26/11/2026)
+
+- **0.10.0 (26/11/2026)** : les vidéos restantes (`.wma` qui sont des WMV, `.mov`, `.mp4`, refusées ou inconnues d'Immich) passent en MP4. Détail dans `CHANGELOG.md`.
+  - `app/video.py` (partagé avec l'encodeur du PC, sans base ni Immich) : `sonder`, `mesures`, `voie` (remux / tel_quel / encode / pas_video), `date_trouvee`, `nom_mp4`, `commande`, `mettre_en_mp4` (plafond 1,5 ×), `essai_vaapi`, `prouver` (durée, son, images, définition, décodage, SSIM).
+  - `app/passage.py` : `preparer_videos` (appelé par `_migrer`), file `prendre` / `vie` / `finir` / `echouer` / `_rendre_perimes`, `encodeur_nas_tour`, `dossiers_a_envoyer`, `etat_encodage`, `_prouver_video` (dans `_controler`), sas `_vers_sas` / `remettre` / `vider_sas`, `_original_inchange` (dans `supprimer`). États `a_encoder` et `encodee`. `RESTENT` = refuse, pas_video, encodage. Clé `videos_lancees` (dossiers dont « Faire passer » a lu les vidéos) dans `reglages` de la base.
+  - `app/main.py` : boucle `_boucle_encodeur` (tâche `encodeur-nas`, `ETAT["encodeur_nas"]=False` la coupe dans les tests), envoi automatique des MP4 dans `_boucle_auto`, porte `/calcul/…` (garde : `TRANSHUMANCE_JETON_CALCUL`), `/api/encodage`, `/api/sas/remettre`, fiche `encodeur-pc`. Partie `immich` de `/api/connexions` retirée.
+  - `app/encodeur.py` + `Dockerfile.encodeur` + `pc/encodeur.yml` + `pc/encodeur.env.exemple` : l'encodeur du PC.
+  - Relecture indépendante du 26/11/2026 : 8 défauts corrigés avant publication (voir `CHANGELOG.md`), dont le sas qui relit la copie dans Immich avant d'effacer et la preuve sur l'empreinte du MP4 envoyé.
+  - Déploiement : nouvelle variable `TRANSHUMANCE_JETON_CALCUL` (stack et `.env` du PC) ; ligne `devices: /dev/dri` **seulement si** `ls /dev/dri` sur le NAS montre `renderD128` (sinon le conteneur ne se crée pas).
+  - **Jamais essayé sur la vraie installation.**
 
 - **0.9.7 (24/11/2026)** : la taille d'un dossier est ce qui reste sur le NAS. `arbre()` (`app/passage.py`) ajoute `restants` et `poids_restant` à chaque nœud (tout sauf `supprimee`, remonté jusqu'à la racine) ; `photos`/`videos`/`poids` restent le total de départ (`fini`, `avance` de `Migrer.svelte` s'en servent). Écran : `taille(n)` dans `Migrer.svelte`. Test `test_097_…`. Cause : 219,3 Go encore affichés le 24/11 après la suppression de la Pellicule. **Jamais essayé sur la vraie installation.**
 
@@ -48,6 +57,13 @@
 5. Que fait Immich quand le fichier d'une photo externe disparaît avant notre retrait ?
 6. La recherche `POST /search/metadata` avec `libraryId` renvoie-t-elle aussi les photos masquées et archivées ?
 
+## À vérifier à l'essai (0.10.0)
+
+7. `/dev/dri` existe-t-il sur le DS1520+ ? L'essai de la puce (journal « Puce vidéo du NAS essayée », fiche Connexion) réussit-il avec iHD ou i965 ?
+8. Le sas sous `#recycle` est-il bien ignoré par Immich (aucune vidéo du sas réapparue dans la bibliothèque externe après un scan) ?
+9. Immich accepte-t-il les MP4 et en fait-il une vignette (`thumbhash`) ? Les dates (balise `creation_time`) sont-elles celles attendues ?
+10. Combien de temps prend un réencodage sur le PC (processeur) et sur le NAS ? La preuve (décodage complet + SSIM) sur le NAS est-elle supportable pour les longues vidéos ?
+
 ## Ce qu'il ne faut pas casser
 
 - 0.9.3 : rien ne part sans être coché. `test_093_…` figent la liste affichée redonnée par l'écran, le verrou d'un seul lot, et les demandes de Millésime qui attendent la case.
@@ -56,6 +72,8 @@
 - Un fichier qu'Immich ne connaît pas n'est jamais touché ; un dossier n'est jamais supprimé.
 - Le journal ne contient aucun nom de personne. Le dépôt est public : exemples inventés seulement.
 - Lecture seule refusée deux fois : dans `Transhumance.exiger_ecriture` et dans `Immich._garde`.
+- 0.10.0 : un original vidéo ne part qu'au sas (jamais effacé au clic), et seulement si son MP4 est prouvé (durée, son, images, définition, décodage, vignette, SSIM ≥ 0,95) et si l'original a la taille et la date lues à la préparation. `test_passage_complet_des_videos` et `test_une_copie_trop_courte_bloque_la_suppression` le figent.
+- 0.10.0 : la file ne donne une vidéo que si son dossier est coché et lancé (`test_rien_ne_part_sans_etre_coche`). Les Live Photos (parties cachées) n'entrent jamais dans la file.
 - Les réglages ne sortent que par `/externe/sauvegarde` : réglages et version seulement (`EXCLUS_SAUVEGARDE` + `maison.est_secret`). Restaurer ne change que les réglages.
 
 ## Limites connues

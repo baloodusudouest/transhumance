@@ -32,6 +32,7 @@ class FauxImmich:
         self.n = 0
         self.abimer: set[str] = set()
         self.refuser: set[str] = set()       # 0.7.3 : fichiers qu'Immich refuse à l'envoi (415)
+        self.sans_vignette: set[str] = set()  # 0.10.0 : fichiers dont Immich ne fait pas de vignette
         self.tags_refuses = 0                       # nombre de reports de tag qu'Immich refuse (500) avant d'accepter
         self.personnes_refusees: set[str] = set()   # personnes dont Immich refuse le rattachement
         self.reconnaissance: dict | None = {"enabled": True, "urls": ["http://pc-invente:3003", "http://immich-machine-learning:3003"]}          # noms de fichiers dont la copie sera abîmée au rangement
@@ -45,7 +46,7 @@ class FauxImmich:
         ident = self._id("ext")
         contenu = (self.dossier / rel).read_bytes()
         self.photos[ident] = {"id": ident, "libraryId": "lib-1", "originalPath": f"{RACINE}/{rel}", "originalFileName": Path(rel).name,
-                              "type": "VIDEO" if rel.lower().endswith((".mov", ".mp4")) else "IMAGE",
+                              "type": "VIDEO" if rel.lower().endswith((".mov", ".mp4", ".wma", ".wmv", ".avi")) else "IMAGE",
                               "checksum": base64.b64encode(hashlib.sha1(b"chemin:" + rel.encode()).digest()).decode(),
                               "fileCreatedAt": date, "isFavorite": False, "visibility": "timeline", "livePhotoVideoId": None,
                               "isTrashed": False, "tags": [],
@@ -177,6 +178,7 @@ class FauxImmich:
                               "type": "VIDEO" if nom.lower().endswith((".mov", ".mp4")) else "IMAGE", "checksum": somme,
                               "fileCreatedAt": champ("fileCreatedAt"), "isFavorite": False, "visibility": champ("visibility") or "timeline",
                               "livePhotoVideoId": champ("livePhotoVideoId"), "isTrashed": False, "tags": [],
+                              "thumbhash": None if nom in self.sans_vignette else "vignette",   # 0.10.0 : Immich a su la lire
                               "exifInfo": {"dateTimeOriginal": "2020-05-01T10:00:00.000Z", "fileSizeInByte": len(contenu), "description": "",
                                            "rating": None, "latitude": None, "longitude": None}}
         # Reconnaissance : mêmes visages que l'ancienne photo au même contenu

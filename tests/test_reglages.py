@@ -60,7 +60,7 @@ def test_les_exclus_du_reglage_comptent_tout_de_suite(monde):
 def client(monde):
     t, im, ids, photos = monde
     main.ETAT.clear()
-    main.ETAT.update(cfg=t.cfg, t=t)
+    main.ETAT.update(cfg=t.cfg, t=t, encodeur_nas=False)
     with TestClient(main.app) as c:
         c.monde = monde
         yield c

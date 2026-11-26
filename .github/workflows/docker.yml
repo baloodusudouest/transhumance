@@ -1,4 +1,5 @@
-# Tests (faux Immich, dossier inventé, écran), puis image ghcr.io/<propriétaire>/transhumance:latest et :<version>.
+# Tests (faux Immich, dossier inventé, écran), puis image ghcr.io/<propriétaire>/transhumance:latest et :<version>,
+# et (0.10.0) l'encodeur du PC ghcr.io/<propriétaire>/transhumance:encodeur et :encodeur-<version>.
 name: Image Docker
 on:
   push:
@@ -15,6 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg   # 0.10.0 : tests des vidéos
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q tests --ignore=tests/interface
       - uses: actions/setup-node@v4
@@ -52,6 +54,27 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/transhumance:${{ steps.v.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # 0.10.0 : l'encodeur des vidéos pour le PC (Docker Desktop)
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.encodeur
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/transhumance:encodeur
+            ghcr.io/${{ github.repository_owner }}/transhumance:encodeur-${{ steps.v.outputs.version }}
+          cache-from: type=gha,scope=encodeur
+          cache-to: type=gha,mode=max,scope=encodeur
+      - name: Démarrage de l'encodeur
+        run: |
+          image=ghcr.io/${{ github.repository_owner }}/transhumance:encodeur-${{ steps.v.outputs.version }}
+          if timeout 30 docker run --rm "$image" >/dev/null 2>&1; then echo "a démarré sans ses variables"; exit 1; fi
+          docker run --rm --entrypoint ffmpeg "$image" -hide_banner -encoders | grep -q libx264
+      - name: ffmpeg dans l'image du NAS
+        run: |
+          image=ghcr.io/${{ github.repository_owner }}/transhumance:${{ steps.v.outputs.version }}
+          docker run --rm --entrypoint ffmpeg "$image" -hide_banner -encoders | grep -q h264_vaapi
       - name: Démarrage de l'image
         run: |
           image=ghcr.io/${{ github.repository_owner }}/transhumance:${{ steps.v.outputs.version }}

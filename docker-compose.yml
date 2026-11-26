@@ -18,10 +18,16 @@ services:
       - TRANSHUMANCE_IMMICH_CLE=${TRANSHUMANCE_IMMICH_CLE}        # clé d'API Immich dédiée : obligatoire
       - TRANSHUMANCE_RACINE_IMMICH=/synologyphotos                # le dossier des photos tel qu'Immich le voit
       - TRANSHUMANCE_LECTURE_SEULE=${TRANSHUMANCE_LECTURE_SEULE:-}     # « oui » : n'envoie rien, ne supprime rien ; « non » : force l'écriture ici seulement
+      - TRANSHUMANCE_JETON_CALCUL=${TRANSHUMANCE_JETON_CALCUL:-}  # 0.10.0 : ouvre /calcul à l'encodeur du PC (pc/encodeur.yml) ; vide : porte fermée
+      # - TRANSHUMANCE_SAS=/photos/#recycle/transhumance-sas      # 0.10.0 : sas des originaux vidéo (30 jours) : valeur par défaut
       # 0.7.0 : les dossiers jamais migrés (ancienne TRANSHUMANCE_EXCLUS) et le passage automatique se règlent dans
       # l'écran Réglages de l'appli (fichier reglages.json de /data, sauvegardé chaque nuit par l'Anneau).
       # TRANSHUMANCE_EXCLUS n'est lue qu'une fois, au premier démarrage de la 0.7.0, pour reprendre la valeur de la stack.
       # L'adresse d'Immich pour les liens du bilan vient de l'Anneau (tuile « Immich ») : plus de variable.
+    # 0.10.0 : puce vidéo Intel du NAS (réencodage quand le PC est absent). À décommenter SEULEMENT si « ls /dev/dri » sur
+    # le NAS montre renderD128 : sinon le conteneur ne se crée pas. Sans elle, le NAS ne fait que les remux.
+    # devices:
+    #   - /dev/dri:/dev/dri
     ports:
       - "${PORT_TRANSHUMANCE:-8097}:8097"
     volumes:

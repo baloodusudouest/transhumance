@@ -32,7 +32,18 @@ class Config:
     attente_files: float = 5.0        # secondes entre deux regards sur les files d'Immich
     delai_files: float = 3600.0       # attente maximale des files pour un dossier
     marge_place: float = 0.8          # part de la place libre qu'un lot peut occuper
+    sas: Path | None = None           # 0.10.0 : sas des originaux vidéo (30 jours) ; défaut : <photos>/#recycle/transhumance-sas
+    jours_sas: int = 30
     extra: dict = field(default_factory=dict)
+
+    @property
+    def dossier_sas(self) -> Path:
+        return self.sas or (self.photos / "#recycle" / "transhumance-sas")
+
+    @property
+    def encodes(self) -> Path:
+        """0.10.0 : les MP4 fabriqués, gardés jusqu'à la suppression de leur original."""
+        return self.data / "encodes"
 
 
 def charger() -> Config:
@@ -54,6 +65,8 @@ def charger() -> Config:
         static=Path(__file__).parent / "static",
         pellicule=e("TRANSHUMANCE_PELLICULE", "Pellicule"),
         albums=e("TRANSHUMANCE_ALBUMS", "Albums"),
+        # 0.10.0 : sous #recycle, qu'Immich ne lit jamais (motif d'exclusion par défaut **/#recycle/**) ni l'inventaire
+        sas=Path(e("TRANSHUMANCE_SAS")) if e("TRANSHUMANCE_SAS") else None,
         # 0.6.0 : MAISON_LECTURE_SEULE pour toute la maison ; TRANSHUMANCE_LECTURE_SEULE (« oui » ou « non ») l'emporte
         lecture_seule=maison.lecture_seule("TRANSHUMANCE_LECTURE_SEULE"),
         lecture_seule_origine=maison.origine_lecture_seule("TRANSHUMANCE_LECTURE_SEULE"),

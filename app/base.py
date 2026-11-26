@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS photos (
     type        TEXT NOT NULL,          -- IMAGE ou VIDEO
     taille      INTEGER NOT NULL DEFAULT 0,
     cachee      INTEGER NOT NULL DEFAULT 0,   -- partie vidéo d'une photo animée
-    etat        TEXT NOT NULL DEFAULT 'vue',  -- vue | envoyee | prete | ecart | supprimee
+    etat        TEXT NOT NULL DEFAULT 'vue',  -- vue | a_encoder | encodee | envoyee | prete | ecart | supprimee
     nouveau_id  TEXT,
     empreinte   TEXT,
     deja_la     INTEGER NOT NULL DEFAULT 0,   -- Immich avait déjà ce fichier dans son stockage
@@ -29,7 +29,30 @@ CREATE TABLE IF NOT EXISTS dossiers (chemin TEXT PRIMARY KEY, album TEXT, coche 
 CREATE TABLE IF NOT EXISTS inconnus (rel TEXT PRIMARY KEY, dossier TEXT NOT NULL);   -- fichiers du dossier qu'Immich ne connaît pas
 CREATE TABLE IF NOT EXISTS journal (id INTEGER PRIMARY KEY AUTOINCREMENT, le TEXT NOT NULL, quoi TEXT NOT NULL, detail TEXT);
 CREATE TABLE IF NOT EXISTS reglages (cle TEXT PRIMARY KEY, valeur TEXT);
+-- 0.10.0 : file des vidéos à mettre en MP4 (une ligne par vidéo « remux » ou « encode »)
+CREATE TABLE IF NOT EXISTS encodages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ancien_id   TEXT NOT NULL UNIQUE,
+    etat        TEXT NOT NULL DEFAULT 'attente',   -- attente | pris | fait | erreur
+    par         TEXT,                   -- pc | nas
+    machine     TEXT,
+    pris_le     TEXT,
+    vu_le       TEXT,                   -- dernier signe de vie de celui qui encode
+    avance      REAL,
+    essais      INTEGER NOT NULL DEFAULT 0,
+    erreur      TEXT
+);
 """
+
+# 0.10.0 : colonnes ajoutées à une base existante (rien n'est jamais retiré)
+COLONNES = (
+    ("photos", "origine", "TEXT NOT NULL DEFAULT 'externe'"),   # externe (connue d'Immich) | inconnu (absente d'Immich)
+    ("photos", "voie", "TEXT"),          # vidéos : remux | encode | tel_quel | pas_video (vide : photo, ou pas encore lue)
+    ("photos", "mesures", "TEXT"),       # vidéos : mesures de l'original, date trouvée, taille et date du fichier (JSON)
+    ("photos", "produit", "TEXT"),       # vidéos : le MP4 fabriqué, sous <données>/encodes
+    ("photos", "sas", "TEXT"),           # vidéos : où est l'original dans le sas, après le clic
+    ("photos", "sas_le", "TEXT"),
+)
 
 
 def maintenant() -> str:
@@ -43,6 +66,9 @@ class Base:
         self._c.row_factory = sqlite3.Row
         self._c.execute("PRAGMA journal_mode=WAL")
         self._c.executescript(SCHEMA)
+        for table, nom, sorte in COLONNES:
+            if nom not in {l[1] for l in self._c.execute(f"PRAGMA table_info({table})")}:
+                self._c.execute(f"ALTER TABLE {table} ADD COLUMN {nom} {sorte}")
         self._verrou = threading.RLock()
 
     def tous(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:

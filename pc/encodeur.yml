@@ -1,0 +1,33 @@
+# =============================================================================
+# Transhumance — encodeur des vidéos sur le PC (Docker Desktop), 0.10.0
+#
+#   Il demande une vidéo à réencoder à Transhumance (NAS) toutes les minutes, la réencode
+#   avec le processeur du PC (la carte AMD n'est pas visible depuis Docker Desktop), renvoie
+#   le MP4, et recommence. Il ne voit ni Immich ni le dossier des photos.
+#
+#   Une seule fois, dans un dossier du PC (par exemple C:\transhumance) :
+#       copier encodeur.env.exemple en .env et le compléter, puis
+#       docker compose -f encodeur.yml up -d
+#   Docker Desktop le relance à chaque ouverture.
+#
+#   PC éteint : la puce vidéo Intel du NAS réencode à sa place (si elle a réussi son essai).
+#   Arrêter (fin de la migration) :  docker compose -f encodeur.yml down
+# =============================================================================
+
+name: transhumance_encodeur
+
+services:
+  transhumance-encodeur:
+    image: ghcr.io/baloodusudouest/transhumance:encodeur
+    container_name: transhumance_encodeur
+    pull_policy: always                     # dernière version à chaque (re)lancement par compose
+    environment:
+      - TZ=Europe/Paris
+      - MACHINE=${COMPUTERNAME:-}           # nom du PC Windows, montré dans Transhumance
+      - TRANSHUMANCE_URL=${TRANSHUMANCE_URL:-http://192.0.2.10:8097}
+      - TRANSHUMANCE_JETON_CALCUL=${TRANSHUMANCE_JETON_CALCUL}
+      - THREADS=${THREADS:-auto}            # fils de calcul de ffmpeg (« auto » : tous les cœurs)
+      - VEILLE_S=60
+    volumes:
+      - ./travail:/travail                  # une vidéo à la fois, vidé après chaque vidéo
+    restart: unless-stopped

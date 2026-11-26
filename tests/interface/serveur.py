@@ -3,13 +3,15 @@
     python -m tests.interface.serveur <dossier> <port>     (mot de passe : « essai-essai »)"""
 from __future__ import annotations
 
+import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 import uvicorn
 
-from app import main, maison
+from app import main, maison, video
 from app.base import Base
 from app.config import Config
 from app.passage import Transhumance
@@ -30,12 +32,28 @@ def main_() -> None:
             ident = im.externe(p.relative_to(photos).as_posix())
             im.visage(ident, "pers-a", 100, ("normal", "timide", "manuel")[i % 3])
     (photos / "Pellicule/2019/2019-08-12 Vendanges/inconnu.jpg").write_bytes(b"x" * 100)
+    # 0.10.0 : une vieille vidéo WMV nommée .wma, qu'Immich ne connaît pas
+    if video.outils():
+        (photos / "Videos/Anciennes").mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25", "-f", "lavfi", "-i", "sine",
+                        "-t", "2", "-c:v", "wmv2", "-c:a", "wmav2", "-f", "asf", str(photos / "Videos/Anciennes/VID_20040101_120000.wma")], check=True)
     cfg = Config(password="essai-essai", immich_url="http://immich", immich_cle=CLE, photos=photos, racine_immich=RACINE,
                  data=racine / "data", static=Path(__file__).resolve().parents[2] / "app" / "static",
                  attente_connexion=False, attente_files=0.2)
     t = Transhumance(cfg, Base(cfg.data / "t.db"), im.transport())
     t.changer_reglages({"exclus": ["Scans"]})                       # 0.7.0 : réglage de l'appli
-    main.ETAT.update(cfg=cfg, t=t)
+    main.ETAT.update(cfg=cfg, t=t, encodeur_nas=False)
+    # 0.10.0 : l'encodeur du NAS tourne au processeur ici (pas de puce vidéo), à petits pas
+    t.materiel_nas = {"ok": True, "mode": "cpu", "pilote": "démonstration", "raison": ""}
+
+    def encodeur():
+        while True:
+            try:
+                t.encodeur_nas_tour()
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(0.5)
+    threading.Thread(target=encodeur, daemon=True).start()
     # 0.7.0 : faux Anneau — l'annuaire (adresse d'Immich) et deux sauvegardes des réglages
     main.ANNUAIRE = maison.Annuaire(jeton="essai", lire=lambda: [{"nom": "Immich", "locale": "http://immich.exemple"}])
     sauvegardes = {"2026-11-15": {"exclus": ["Scans"], "auto_demandes": False},

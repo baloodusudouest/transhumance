@@ -10,7 +10,7 @@ from tests.test_reglages import client, connecter  # noqa: F401 — fixtures par
 
 RACINE = Path(__file__).resolve().parent.parent
 CLE = "cle-anneau-de-test-1234567890"
-IDS = ["immich", "immich-ml"]
+IDS = ["immich", "immich-ml", "encodeur-pc"]          # 0.10.0 : + encodeur du PC (vidéos)
 CHAMPS = {"id", "nom", "genre", "cible", "etat", "lit", "ecrit", "reglage", "detail", "verifie_le", "guide",
           "derniere_ecriture", "gestes"}
 

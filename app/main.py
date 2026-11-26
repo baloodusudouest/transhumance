@@ -1,10 +1,12 @@
 """Transhumance : interface et adresses. Une seule porte : le mot de passe commun.
 
 Routes : /health (publique), /api/session, /api/connexion, /api/deconnexion, puis l'arbre, le lot,
-le bilan, la suppression et le retour arrière ; 0.7.0 : /api/reglages, /api/restaurer, /externe/sauvegarde."""
+le bilan, la suppression et le retour arrière ; 0.7.0 : /api/reglages, /api/restaurer, /externe/sauvegarde.
+0.10.0 : /api/encodage, /api/sas/remettre, et la porte de l'encodeur du PC /calcul/… (jeton TRANSHUMANCE_JETON_CALCUL)."""
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import os
 import threading
@@ -15,9 +17,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import __version__, maison
+from . import __version__, maison, video
 from .auth import COMMUN, DUREE, Sessions, en_https
 from .base import Base
 from .config import APPLI, charger
@@ -40,9 +42,13 @@ async def cycle(app: FastAPI):
     maison.TACHES.declarer(TACHE_AUTO, periode_s=AUTO_S, type="reguliere")
     maison.TACHES.declarer(TACHE_LOT, type="demande")
     maison.TACHES.declarer(TACHE_INVENTAIRE, type="demande")
+    maison.TACHES.declarer(TACHE_ENCODEUR, periode_s=ENCODEUR_S, type="reguliere")
     # 0.4.0 : le passage automatique des dossiers demandés par Millésime (s'il est activé dans l'appli)
     if ETAT.get("boucle_auto", True):
         threading.Thread(target=_boucle_auto, daemon=True, name="auto").start()
+    # 0.10.0 : l'encodeur du NAS (remux toujours ; réencodage par la puce vidéo Intel quand le PC est absent) et le sas
+    if ETAT.get("encodeur_nas", True):
+        threading.Thread(target=_boucle_encodeur, daemon=True, name="encodeur-nas").start()
     # 0.8.0 : copie cohérente de la base chaque nuit (heure de Paris), dans <données>/copies
     copie = asyncio.create_task(maison.planifier_copie(APPLI, [cfg.data / "transhumance.db"], cfg.data / "copies",
                                                        maison.HEURES_COPIE[APPLI]))
@@ -66,6 +72,9 @@ TACHE_AUTO = "passage-auto"        # la boucle qui regarde chaque minute s'il y 
 TACHE_LOT = "lot"                  # un passage (envoi et contrôle) : « Migrer » ou une demande passée toute seule
 TACHE_INVENTAIRE = "inventaire"    # « Relire » : Immich et le dossier des photos
 AUTO_S = 60                        # période de la boucle automatique (secondes)
+TACHE_ENCODEUR = "encodeur-nas"    # 0.10.0 : met en MP4 les vidéos de la file que le PC ne prend pas ; vide le sas
+ENCODEUR_S = 20
+SAS_S = 3600                       # le sas est regardé une fois par heure
 
 
 class _LotInterrompu(Exception):
@@ -105,14 +114,44 @@ def _boucle_auto() -> None:
             except BaseException:
                 tr.verrou_lot.release()
                 raise
-            if not chemin:
+            if chemin:
+                _lot_suivi([chemin], origine="Millésime", verrou_pris=True)
+                continue
+            # 0.10.0 : les vidéos mises en MP4 partent toutes seules (dossiers cochés et lancés par « Faire passer »)
+            try:
+                prets = tr.dossiers_a_envoyer() if not tr.tache.get("en_cours") else []
+            except BaseException:
+                tr.verrou_lot.release()
+                raise
+            if not prets:
                 tr.verrou_lot.release()
                 continue
-            _lot_suivi([chemin], origine="Millésime", verrou_pris=True)
+            _lot_suivi(prets, origine="l'encodage des vidéos", verrou_pris=True)
         except _LotInterrompu:
             pass                  # comme avant : l'erreur est dans la tâche, montrée à l'écran, et déjà au journal
         except Exception as exc:  # noqa: BLE001 — l'erreur est dans la tâche, montrée à l'écran
             log.warning("Passage automatique interrompu : %s", exc)
+
+
+def _boucle_encodeur() -> None:
+    """0.10.0 : essai de la puce vidéo du NAS au démarrage, puis un tour toutes les 20 s (enchaîné tant qu'il y a du
+    travail) ; le sas est vidé une fois par heure."""
+    tr = ETAT["t"]
+    tr.materiel_nas = {**video.essai_vaapi(), "mode": "vaapi"}
+    tr.base.noter("Puce vidéo du NAS essayée", {"ok": tr.materiel_nas["ok"], "pilote": tr.materiel_nas.get("pilote")})
+    dernier_sas = 0.0
+    while True:
+        try:
+            with maison.TACHES.tour(TACHE_ENCODEUR):
+                if time.monotonic() - dernier_sas > SAS_S:
+                    dernier_sas = time.monotonic()
+                    tr.vider_sas()
+                travaille = tr.encodeur_nas_tour()
+        except Exception as exc:  # noqa: BLE001 — suivi dans /health, au journal ; la boucle continue
+            log.warning("Encodeur du NAS : %s", exc)
+            travaille = False
+        if not travaille:
+            time.sleep(ENCODEUR_S)
 
 
 app = FastAPI(title=APPLI, version=__version__, lifespan=cycle, docs_url=None, redoc_url=None)
@@ -135,13 +174,21 @@ async def garde(request: Request, appel):
             return JSONResponse({"detail": "Adresse fermée."}, status_code=404)
         if not maison.jeton_valide(maison.jeton_propose(request.headers), acceptes):
             return JSONResponse({"detail": "Jeton manquant ou invalide."}, status_code=401)
+    if chemin.startswith("/calcul/"):
+        # 0.10.0 : l'encodeur du PC (comme le calculateur de Millésime). Jeton propre à Transhumance ; absent : fermé.
+        attendu = os.environ.get("TRANSHUMANCE_JETON_CALCUL", "")
+        if not attendu:
+            return JSONResponse({"detail": "Adresse fermée."}, status_code=404)
+        propose = maison.jeton_propose(request.headers)
+        if not propose or not hmac.compare_digest(propose.encode(), attendu.encode()):
+            return JSONResponse({"detail": "Jeton manquant ou invalide."}, status_code=401)
     if chemin.startswith("/api/"):
         libre = chemin == "/api/session" or (chemin == "/api/connexion" and request.method == "POST")
         s = ETAT["sessions"]
         if not libre and not s.connecte(request.cookies):
             return JSONResponse({"detail": "Connexion nécessaire."}, status_code=401)
     reponse = await appel(request)
-    if chemin.startswith(("/api/", "/externe/")):
+    if chemin.startswith(("/api/", "/externe/", "/calcul/")):
         reponse.headers["Cache-Control"] = "no-store"
     return reponse
 
@@ -243,21 +290,12 @@ def reconnaissance():
 
 @app.get("/api/connexions")
 def connexions():
-    """0.9.0 : l'écran Connexion lit /api/maison/services. Cette route reste pour Réglages (journal, dossier des
-    photos) ; sa partie « immich » n'est plus lue par l'interface : à retirer en 0.10.0."""
+    """Réglages : journal et dossier des photos. 0.10.0 : la partie « immich » (annoncée en 0.9.0) est retirée ;
+    l'état d'Immich est dans l'écran Connexion (/api/maison/services)."""
     cfg = ETAT["cfg"]
-    im = t().immich()
-    try:
-        immich = {"ok": True, "version": im.version(), "place_libre": im.place_libre()}
-        SERVICES.noter("immich", True, _phrase_immich(immich["version"], immich["place_libre"]))
-    except ErreurImmich as exc:
-        immich = {"ok": False, "erreur": str(exc)}
-        SERVICES.noter("immich", False, str(exc))
-    finally:
-        im.fermer()
     # 0.7.1 : plus de fichier d'essai écrit dans le dossier des photos (même en lecture seule) : on demande au système
     inscriptible = cfg.photos.is_dir() and os.access(cfg.photos, os.W_OK | os.X_OK)
-    return {"immich": immich, "dossier": {"lisible": cfg.photos.is_dir(), "inscriptible": inscriptible,
+    return {"dossier": {"lisible": cfg.photos.is_dir(), "inscriptible": inscriptible,
                                           "exclus": t().exclus()},
             "version": __version__, "lecture_seule": cfg.lecture_seule, "lecture_seule_origine": cfg.lecture_seule_origine,
             "journal": [dict(l) for l in t().base.tous("SELECT le, quoi, detail FROM journal ORDER BY id DESC LIMIT 60")]}
@@ -426,6 +464,68 @@ SERVICES.ajouter(
     regle=lambda: bool(ETAT.get("cfg") and ETAT["cfg"].immich_cle),
     reglage="TRANSHUMANCE_IMMICH_CLE",
     essai=_essai_pc, guide=_guide_pc)
+
+
+def _essai_encodeur():
+    e = t().etat_encodage()
+    pc = e["pc"]
+    if not os.environ.get("TRANSHUMANCE_JETON_CALCUL"):
+        return False, "TRANSHUMANCE_JETON_CALCUL n'est pas posé : la porte de l'encodeur est fermée."
+    if pc["actif"]:
+        return True, f"Le PC ({pc['machine'] or 'sans nom'}) est là · {e['file']['attente']} vidéo(s) en attente."
+    nas = "la puce vidéo du NAS encode à sa place" if e["nas"]["ok"] else "le NAS ne peut pas réencoder : les vidéos attendent le PC"
+    return False, ("Le PC n'a jamais fait signe" if not pc["vu_le"] else f"Le PC n'a pas fait signe depuis le {pc['vu_le'][:16].replace('T', ' ')}") + f" ; {nas}."
+
+
+def _guide_encodeur() -> dict:
+    e = t().etat_encodage()
+    return {
+        "reglages": [
+            {"nom": "Porte de l'encodeur", "valeur": "ouverte (jeton posé)" if os.environ.get("TRANSHUMANCE_JETON_CALCUL") else "fermée : TRANSHUMANCE_JETON_CALCUL absent"},
+            {"nom": "PC", "valeur": (f"{e['pc']['machine'] or 'sans nom'}, vu le {e['pc']['vu_le']}" if e["pc"]["vu_le"] else "jamais vu")},
+            {"nom": "Puce vidéo du NAS", "valeur": (f"prête (pilote {e['nas']['pilote']})" if e["nas"]["ok"] else (e["nas"]["raison"] or "pas prête"))},
+            {"nom": "File", "valeur": f"{e['file']['attente']} en attente · {e['file']['pris']} en cours · {e['file']['faits']} faites · {e['file']['erreurs']} en erreur"},
+        ],
+        "allumer": [
+            "Allumer le PC et ouvrir Docker Desktop : le conteneur transhumance_encodeur redémarre tout seul "
+            "(restart: unless-stopped, fichier pc/encodeur.yml du dépôt) et demande une vidéo toutes les minutes.",
+            "PC éteint : la puce vidéo Intel du NAS réencode à sa place, si elle a réussi son essai ; sinon les vidéos "
+            "attendent le PC. Les changements d'enveloppe (remux) se font toujours sur le NAS.",
+            "Après la migration : « docker compose -f encodeur.yml down » sur le PC.",
+        ],
+        "pannes": [
+            {"signe": "« Le PC n'a jamais fait signe » ou « pas fait signe depuis… »",
+             "faire": ["Docker Desktop est-il ouvert, le conteneur transhumance_encodeur lancé ?",
+                       "Sa fin de journal dit s'il joint Transhumance (adresse TRANSHUMANCE_URL du .env) et si le jeton est accepté."],
+             "commandes": ["docker ps --filter name=transhumance_encodeur", "docker logs --tail 30 transhumance_encodeur"]},
+            {"signe": "« Jeton manquant ou invalide » dans le journal de l'encodeur",
+             "faire": ["Le TRANSHUMANCE_JETON_CALCUL du .env du PC doit être celui de la stack homelab (Portainer)."],
+             "commandes": []},
+            {"signe": "« Le NAS ne peut pas réencoder »",
+             "faire": ["Le conteneur transhumance n'a pas la puce vidéo (/dev/dri) : ligne « devices » de la stack, et "
+                       "pilote i915 chargé sur le NAS (tâche planifiée au démarrage, voir le coffre). Sans elle, seuls "
+                       "les changements d'enveloppe se font sur le NAS."],
+             "commandes": []},
+        ],
+        "une_fois": [
+            {"texte": "Copier pc/encodeur.yml et pc/encodeur.env.exemple (dépôt transhumance) dans un dossier du PC (par "
+                      "exemple C:\transhumance), renommer l'exemple en .env et le compléter (adresse de Transhumance, "
+                      "jeton de la stack), puis, avec Docker Desktop ouvert :",
+             "commande": "docker compose -f encodeur.yml up -d"},
+        ],
+        "terminal": "Les commandes se tapent dans PowerShell sur le PC (menu Démarrer › PowerShell).",
+        "note": "La carte graphique AMD n'est pas visible depuis Docker Desktop : le PC encode avec son processeur. "
+                "Ce guide n'a jamais été essayé sur la vraie installation.",
+    }
+
+
+SERVICES.ajouter(
+    "encodeur-pc", "Encodeur du PC (vidéos)",
+    lit="L'encodeur du PC vient chercher les vidéos à réencoder (WMV, anciens formats), une à la fois, et renvoie un MP4.",
+    ecrit="Rien chez lui : le MP4 est rangé dans le dossier de données de Transhumance, puis envoyé à Immich par Transhumance.",
+    regle=lambda: bool(os.environ.get("TRANSHUMANCE_JETON_CALCUL")),
+    reglage="TRANSHUMANCE_JETON_CALCUL",
+    essai=_essai_encodeur, guide=_guide_encodeur)
 # Monté APRÈS la garde : le dernier middleware ajouté passe en premier.
 maison.monter_services(app, SERVICES, lambda r: "sessions" in ETAT and ETAT["sessions"].connecte(r.cookies))
 
@@ -616,9 +716,76 @@ def defaire(corps: dict = Body(...)):
     return t().defaire(str(corps.get("chemin", "")))
 
 
+# ---------------------------------------------------------------- 0.10.0 : vidéos (écran) et encodeur du PC (jeton)
+
+@app.get("/api/encodage")
+def encodage():
+    return t().etat_encodage()
+
+
+@app.post("/api/sas/remettre")
+def remettre(corps: dict = Body(...)):
+    return t().remettre(str(corps.get("ancien", "")))
+
+
+@app.post("/calcul/signal")
+def calcul_signal(corps: dict | None = Body(None)):
+    t().pc_vu((corps or {}).get("machine", ""))
+    return {"ok": True}
+
+
+@app.post("/calcul/prendre")
+def calcul_prendre(corps: dict | None = Body(None)):
+    """Le PC demande une vidéo à réencoder (jamais les remux, faits sur le NAS). 204 : rien à faire."""
+    tr = t()
+    tr.pc_vu((corps or {}).get("machine", ""))
+    job = tr.prendre("pc", (corps or {}).get("machine", ""), ("encode",))
+    return job if job else Response(status_code=204)
+
+
+@app.get("/calcul/fichier/{ident}")
+def calcul_fichier(ident: int):
+    f = t().fichier_a_encoder(ident, "pc")
+    if not f.is_file():
+        raise HTTPException(404, "L'original n'est plus dans le dossier.")
+    return FileResponse(f, media_type="application/octet-stream", filename=f.name)
+
+
+@app.post("/calcul/vie/{ident}")
+def calcul_vie(ident: int, corps: dict | None = Body(None)):
+    t().pc_vu((corps or {}).get("machine", ""))
+    return {"continuer": t().vie(ident, (corps or {}).get("avance"), "pc")}
+
+
+@app.post("/calcul/rendre/{ident}")
+async def calcul_rendre(ident: int, request: Request, nom: str = "video.mp4", grossi: bool = False, leger: bool = False):
+    """Le MP4 arrive en flux dans le corps ; écrit à côté (.part), puis renommé et vérifié."""
+    tr = t()
+    tr._encodage(ident, "pc")
+    cible = tr.chemin_produit(ident, nom)
+    cible.parent.mkdir(parents=True, exist_ok=True)
+    temp = cible.with_name(cible.name + ".part")
+    try:
+        with temp.open("wb") as f:
+            async for bloc in request.stream():
+                f.write(bloc)
+        os.replace(temp, cible)
+    finally:
+        temp.unlink(missing_ok=True)
+    tr.pc_vu()
+    await asyncio.to_thread(tr.finir, ident, cible, {"grossi": grossi, "leger": leger, "materiel": "processeur du PC"}, "pc")
+    return {"ok": True}
+
+
+@app.post("/calcul/erreur/{ident}")
+def calcul_erreur(ident: int, corps: dict | None = Body(None)):
+    t().echouer(ident, str((corps or {}).get("message", "erreur sans message"))[:400], "pc")
+    return {"ok": True}
+
+
 @app.get("/{chemin:path}")
 def interface(chemin: str):
-    if chemin.startswith("api/"):
+    if chemin.startswith(("api/", "calcul/")):
         raise HTTPException(404, "Adresse inconnue.")
     statique = ETAT["cfg"].static
     fichier = (statique / chemin).resolve() if chemin else None

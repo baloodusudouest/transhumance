@@ -18,7 +18,9 @@ FROM python:3.12-slim-bookworm
 LABEL org.opencontainers.image.title="transhumance" \
       org.opencontainers.image.description="Fait passer une bibliothèque externe d'Immich dans son stockage, en gardant personnes et albums" \
       org.opencontainers.image.source="https://github.com/baloodusudouest/transhumance"
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
+# 0.10.0 : ffmpeg (vidéos) et les pilotes de la puce vidéo Intel du NAS (iHD, puis i965 pour les puces plus anciennes)
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata ffmpeg intel-media-va-driver i965-va-driver vainfo \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=roues /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 WORKDIR /app

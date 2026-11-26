@@ -1,5 +1,6 @@
 <script>
   import Reconnaissance from '$lib/Reconnaissance.svelte'
+  import Encodage from '$lib/Encodage.svelte'
   // « Migrer » : l'arborescence des dossiers. On coche, on règle le nom de l'album, on fait passer,
   // on lit le bilan, puis — seulement là — on supprime les originaux prouvés copiés.
   import { onMount, onDestroy } from 'svelte'
@@ -20,7 +21,21 @@
 
   const refus = (e) => { if (e.statut === 401) ondeconnecte?.(); else message = e.message }
   const tache = $derived(a?.tache || { en_cours: false })
-  const ETATS = { vue: 'à migrer', envoyee: 'envoyées', prete: 'copiées et contrôlées', ecart: 'avec un écart', supprimee: 'originaux supprimés' }
+  const ETATS = { vue: 'à migrer', a_encoder: 'vidéos à mettre en MP4', encodee: 'vidéos en MP4, à envoyer', envoyee: 'envoyées',
+    prete: 'copiées et contrôlées', ecart: 'avec un écart', supprimee: 'originaux supprimés' }
+  // 0.10.0 : les vidéos restantes
+  const VOIES = { remux: 'changement d\'enveloppe (image intacte)', encode: 'réencodage', tel_quel: 'envoyée telle quelle', pas_video: 'pas d\'image' }
+  const SOURCES = { immich: 'date d\'Immich', video: 'date de la vidéo', nom: 'date du nom', dossier: 'date du dossier', annee: 'année du dossier (approchée)', aucune: 'aucune date trouvée' }
+  const ETAT_VIDEO = { a_encoder: 'dans la file', encodee: 'en MP4, part au prochain envoi', envoyee: 'envoyée, contrôle à venir',
+    prete: 'copiée et prouvée', ecart: 'écart', supprimee: 'original au sas ou effacé', vue: 'à envoyer' }
+  const descVideo = (v) => [
+    VOIES[v.voie] || v.voie,
+    v.avant?.codec ? `${v.avant.codec}${v.avant.extension ? ' (' + v.avant.extension + ')' : ''} ${poids(v.avant.taille)}` + (v.apres ? ` → ${v.apres.codec} ${poids(v.apres.taille)}` : '') : '',
+    v.date ? `${SOURCES[v.source_date] || v.source_date} : ${new Date(v.date).toLocaleDateString('fr-FR')}` : SOURCES.aucune,
+    v.ssim ? `ressemblance ${Math.round(v.ssim * 1000) / 10} %` : '',
+  ].filter(Boolean).join(' · ')
+  const remettre = (v) => faire('remettre', async () => { await api.post('/api/sas/remettre', { ancien: v.ancien }); await voirBilan(bilan.chemin); await lire() },
+    'Vidéo remise à sa place d\'origine ; sa copie reste dans Immich.')
 
   async function lire() {
     try { a = await api.get('/api/arbre'); lot = await api.get('/api/lot') } catch (e) { refus(e) }
@@ -99,6 +114,7 @@
     {:else if tache.message}<p class="mt-2 text-sm" role="status" id="tache">{tache.message}</p>{/if}
     {#if ailleurs}<p class="mt-2 text-sm" role="status" id="suppression-en-cours">Suppression en cours dans « {ailleurs.dossier} » : {ailleurs.fait} sur {ailleurs.total}.</p>{/if}
     <Reconnaissance {ondeconnecte} />
+    <Encodage {ondeconnecte} onchange={lire} />
     <!-- 0.4.0 : les dossiers que Millésime a fini de dater passent tout seuls (envoi et contrôle seulement) -->
     <label class="auto mt-3">
       <input type="checkbox" checked={a.auto_demandes} disabled={!!attente || lectureSeule}
@@ -138,6 +154,34 @@
         </ul>
       {/if}
 
+      {#if bilan.videos.length}
+        <details class="mt-4 text-sm" open={bilan.en_file > 0}>
+          <summary class="etiquette cursor-pointer">Vidéos restantes ({bilan.videos.length}){bilan.en_file ? ` — ${bilan.en_file} en cours de mise en MP4` : ''}</summary>
+          <ul class="mt-1 divide-y" aria-label="Vidéos">
+            {#each bilan.videos as v (v.ancien)}
+              <li class="py-2"><span class="block break-all font-medium">{v.fichier}</span>
+                <span class="block">{ETAT_VIDEO[v.etat] || v.etat}{v.file?.etat === 'pris' ? ` (${v.file.par === 'pc' ? 'PC' : 'NAS'})` : ''}{v.file?.essais && v.etat !== 'prete' ? ` · ${v.file.essais} essai(s) raté(s)` : ''}</span>
+                <span class="block text-muted-foreground">{descVideo(v)}</span></li>
+            {/each}
+          </ul>
+        </details>
+      {/if}
+
+      {#if bilan.sas.nombre}
+        <details class="mt-4 text-sm">
+          <summary class="etiquette cursor-pointer">Sas des originaux vidéo ({bilan.sas.nombre} · {poids(bilan.sas.poids)}) — effacés {bilan.sas.jours} jours après le clic</summary>
+          <ul class="mt-1 divide-y" aria-label="Sas">
+            {#each bilan.sas.lignes as v (v.ancien)}
+              <li class="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span class="min-w-0"><span class="block break-all font-medium">{v.fichier}</span>
+                  <span class="block text-muted-foreground">Au sas le {quand(v.le)} · effacé le {quand(v.efface_le)}</span></span>
+                <Button variant="outline" onclick={() => remettre(v)} disabled={!!attente || lectureSeule}>Remettre à sa place</Button>
+              </li>
+            {/each}
+          </ul>
+        </details>
+      {/if}
+
       {#if bilan.fichiers_inconnus.length}
         <details class="mt-4 text-sm">
           <summary class="etiquette cursor-pointer">Fichiers qu'Immich ne connaît pas ({bilan.inconnus}) — ils restent dans le dossier</summary>
@@ -161,7 +205,8 @@
           <p class="text-sm" id="termine">Il n'y a plus rien à faire ici. Le dossier vide reste sur le NAS : tu peux l'effacer à la main quand tu veux.</p>
         {:else if bilan.supprimable}
           <p class="text-sm"><strong class="font-semibold">Supprimer définitivement {bilan.a_supprimer} fichier(s) d'origine</strong> de ce dossier, et retirer les anciennes photos d'Immich.
-            Les copies restent dans Immich. {bilan.inconnus ? `Les ${bilan.inconnus} fichier(s) qu'Immich ne connaît pas restent dans le dossier.` : ''} Il n'y a pas de corbeille : le seul retour est ta sauvegarde.</p>
+            Les copies restent dans Immich. {bilan.inconnus ? `Les ${bilan.inconnus} fichier(s) qu'Immich ne connaît pas restent dans le dossier.` : ''}
+            {bilan.videos.length ? `Les originaux des vidéos vont au sas pendant ${bilan.sas.jours} jours (remettables), puis sont effacés. Pour les photos, ` : ''}il n'y a pas de corbeille : le seul retour est ta sauvegarde.</p>
           <label class="mt-2 flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" class="size-5 accent-[var(--app)]" bind:checked={confirme} />
             J'ai ouvert des photos de ce lot dans Immich, elles sont bonnes.</label>
           <div class="mt-2"><Button variant="destructive" onclick={supprimer} disabled={!confirme || !!attente || lectureSeule}>
@@ -176,7 +221,7 @@
             </div>
           {/if}
         {:else}
-          <p class="text-sm">Pas encore supprimable : {bilan.a_supprimer ? (tache.en_cours ? 'le contrôle est en cours, reviens quand le lot est fini.' : bilan.etats.envoyee ? 'des photos envoyées attendent leur contrôle : relance « Faire passer ».' : 'un écart reste à régler (copie différente, absente ou fichier introuvable), ou des photos ne sont pas passées. Un fichier refusé par Immich ne bloque pas : il reste dans le dossier.') : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
+          <p class="text-sm">Pas encore supprimable : {bilan.en_file ? `${bilan.en_file} vidéo(s) sont en cours de mise en MP4 ; elles partiront toutes seules, puis seront contrôlées.` : bilan.a_supprimer ? (tache.en_cours ? 'le contrôle est en cours, reviens quand le lot est fini.' : bilan.etats.envoyee ? 'des photos envoyées attendent leur contrôle : relance « Faire passer ».' : 'un écart reste à régler (copie différente, absente ou fichier introuvable), ou des photos ne sont pas passées. Un fichier refusé par Immich ne bloque pas : il reste dans le dossier.') : 'aucune photo de ce dossier n\'est copiée et contrôlée.'}</p>
         {/if}
         {#if (bilan.etats.prete || 0) + (bilan.etats.ecart || 0) + (bilan.etats.envoyee || 0)}
           <div class="mt-3"><Button variant="outline" class="h-auto min-h-10 max-w-full whitespace-normal py-2 text-left" onclick={defaire} disabled={!!attente || tache.en_cours || lectureSeule}>Défaire ce dossier (retirer les copies d'Immich)</Button></div>

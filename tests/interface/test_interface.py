@@ -1,6 +1,7 @@
 """Tests d'écran de Transhumance (PC) contre un faux Immich : le parcours entier, jusqu'au clic."""
 from __future__ import annotations
 
+import os
 import re
 import socket
 import subprocess
@@ -39,7 +40,7 @@ def monde(tmp_path_factory):
 @pytest.fixture(scope="module")
 def page(monde):
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch()
+        b = p.chromium.launch(executable_path=os.environ.get("CHROME") or None)   # CHROME : navigateur déjà installé
         pg = b.new_page(viewport={"width": 1280, "height": 900})
         pg.set_default_timeout(10000)
         erreurs = []
@@ -213,3 +214,37 @@ def test_6_sur_iphone_la_pilule_en_bas(page, monde):
         assert pg.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
         assert not erreurs, erreurs
         c.close()
+
+
+def test_7_une_vieille_video_passe_en_mp4(page, monde):
+    """0.10.0 : un WMV nommé .wma, inconnu d'Immich : lu, mis en MP4 par l'encodeur, envoyé, prouvé."""
+    photos = monde[1]
+    if not (photos / "Videos/Anciennes/VID_20040101_120000.wma").is_file():
+        pytest.skip("ffmpeg absent")
+    page.get_by_role("link", name="Migrer").click()
+    page.get_by_role("heading", level=1, name="Migrer").wait_for()
+    page.get_by_role("button", name="Relire Immich et le dossier").click()
+    page.locator("#message", has_text="relus").wait_for()
+    page.get_by_role("checkbox", name="Cocher Videos", exact=True).check()
+    passer = page.get_by_role("button", name=re.compile(r"Faire passer les dossiers cochés \(1\)"))
+    passer.click()
+    page.locator("#tache", has_text="mise en MP4").wait_for(timeout=30000)
+    page.locator("#encodage").wait_for(timeout=15000)
+    page.get_by_role("button", name="Déplier Videos", exact=True).click()
+    page.wait_for_function("() => document.body.innerText.includes('vidéos en MP4, à envoyer')", timeout=30000)
+    passer.click()
+    page.wait_for_function("() => { const t = document.querySelector('#tache')?.innerText || ''; "
+                           "return t.includes('Lot passé') && !t.includes('mise en MP4') }", timeout=30000)
+    ligne(page, "Anciennes").get_by_role("button", name="Bilan").click()
+    videos = page.get_by_role("list", name="Vidéos")
+    page.get_by_text(re.compile(r"Vidéos restantes \(1\)")).click()
+    assert "copiée et prouvée" in videos.inner_text() and "réencodage" in videos.inner_text()
+    assert "date du nom" in videos.inner_text()
+    bilan = page.get_by_role("region", name="Bilan")
+    assert "vont au sas" in bilan.inner_text()
+    bilan.get_by_role("checkbox").check()
+    bilan.get_by_role("button", name=re.compile("Supprimer les 1 originaux")).click()
+    page.locator("#message", has_text="1 original(aux) supprimé(s)").wait_for()
+    assert not (photos / "Videos/Anciennes/VID_20040101_120000.wma").exists()
+    assert list((photos / "#recycle/transhumance-sas").rglob("*.wma"))
+
