@@ -16,7 +16,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg   # 0.10.0 : tests des vidéos
+      # 0.10.0 : ffmpeg pour les tests des vidéos (sans lui, ils sont sautés et le disent ; l'image est quand même testée)
+      - name: ffmpeg
+        continue-on-error: true
+        run: |
+          sudo apt-get update -o Acquire::Retries=3 || true
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 ffmpeg
+          ffmpeg -hide_banner -version | head -1
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q tests --ignore=tests/interface
       - uses: actions/setup-node@v4
