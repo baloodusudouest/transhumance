@@ -2,8 +2,9 @@
 
 À lire avant de toucher au dépôt. Dossier : `docs/dossier.md` ; avis du conseil : `docs/conseil.md`. 0.10.0 : `docs/dossier-0.10.0.md`, `docs/conseil-0.10.0.md`.
 
-## Où on en est (26/11/2026)
+## Où on en est (27/11/2026)
 
+- **0.10.1 (27/11/2026)** : `supprimer` vérifie `fichier.is_file()` après la relecture de la copie : absent → écart `original_absent` (non bloquant, `accepte` remis à 0, note au journal) ; écart déjà accepté → ligne close (`supprimee`, sans sas), ancienne entrée d'Immich retirée comme d'habitude. `frontend/package.json` remis au numéro de l'appli (il était resté en 0.9.7). **Jamais essayé sur la vraie installation.**
 - **0.10.0 (26/11/2026)** : les vidéos restantes (`.wma` qui sont des WMV, `.mov`, `.mp4`, refusées ou inconnues d'Immich) passent en MP4. Détail dans `CHANGELOG.md`.
   - `app/video.py` (partagé avec l'encodeur du PC, sans base ni Immich) : `sonder`, `mesures`, `voie` (remux / tel_quel / encode / pas_video), `date_trouvee`, `nom_mp4`, `commande`, `mettre_en_mp4` (plafond 1,5 ×), `essai_vaapi`, `prouver` (durée, son, images, définition, décodage, SSIM).
   - `app/passage.py` : `preparer_videos` (appelé par `_migrer`), file `prendre` / `vie` / `finir` / `echouer` / `_rendre_perimes`, `encodeur_nas_tour`, `dossiers_a_envoyer`, `etat_encodage`, `_prouver_video` (dans `_controler`), sas `_vers_sas` / `remettre` / `vider_sas`, `_original_inchange` (dans `supprimer`). États `a_encoder` et `encodee`. `RESTENT` = refuse, pas_video, encodage. Clé `videos_lancees` (dossiers dont « Faire passer » a lu les vidéos) dans `reglages` de la base.

@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 0.10.1 — 27 novembre 2026 (original absent au moment de supprimer)
+- **Constaté le 27/11/2026** (essai TRA-18) : Julien avait retiré à la main les 5 `.wma` d'un dossier après leur passage en MP4 ; le clic « Supprimer les originaux » les a comptées « supprimées », sans rien au sas (le fichier n'était plus là : rien à déplacer). Le bilan disait « originaux supprimés » sans le dire.
+- **Écart `original_absent`** (non bloquant) : au moment du clic, un original (photo ou vidéo) qui n'est plus dans le dossier n'est plus compté supprimé ; il passe en écart, avec une ligne au journal « Original absent au moment de supprimer ». Une fois l'écart accepté, le clic suivant clôt la ligne sans rien toucher (choix de Julien).
+- Test `test_original_absent_au_clic_ecart_puis_clos`. Jamais essayé sur la vraie installation.
+
 ## 0.10.0 — 26 novembre 2026 (les vidéos restantes passent en MP4)
 - **Besoin (26/11/2026)** : les fichiers qui restent sont des vidéos `.wma` (en fait des WMV mal nommés), `.mov` et `.mp4`, refusées par Immich ou inconnues d'Immich. Dossier `docs/dossier-0.10.0.md`, avis du conseil `docs/conseil-0.10.0.md`.
 - **Repérage** (`app/video.py`) : chaque vidéo est lue par ffprobe (l'extension ne compte pas : un `.wma` avec une image est une vidéo). Trois voies : **remux** (H.264 8 bits : enveloppe MP4, image intacte, son copié s'il est AAC/MP3, sinon AAC 192k), **tel_quel** (HDR, 10 bits, Dolby Vision, HEVC : envoyée sans transformation, prouvée par empreinte), **encode** (le reste : H.264 CRF 18 `slow` au processeur, `h264_vaapi` QP 20 sur la puce Intel). Un fichier sans image (vrai son) : écart `pas_video`, laissé dans le dossier sans bloquer les autres. Les Live Photos ne sont jamais séparées de leur photo.

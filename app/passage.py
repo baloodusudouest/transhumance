@@ -55,6 +55,9 @@ ECARTS = {
     "illisible": ("La vidéo mise en MP4 ne se lit pas jusqu'au bout, ou Immich n'en a pas fait de vignette.", True),
     "fidelite": ("Des images de la vidéo mise en MP4 ne ressemblent pas assez à l'original.", True),
     "grossi": ("La vidéo réencodée est plus lourde que l'original, même en qualité plus légère.", False),
+    # 0.10.1 : constaté le 27/11/2026 — des originaux vidéo retirés à la main étaient comptés « supprimés » sans rien au sas
+    "original_absent": ("Au moment de supprimer, le fichier d'origine n'était plus dans le dossier (retiré à la main ?) : "
+                        "rien n'a été supprimé ni mis au sas. La copie est dans Immich ; accepter pour clore.", False),
 }
 
 
@@ -1271,6 +1274,16 @@ class Transhumance:
                     self._etat(l["ancien_id"], "ecart", ["copie_absente" if copie is None else "empreinte"])
                     gardes += 1
                     continue
+                # 0.10.1 : original absent au moment du clic : jamais compté « supprimé » en silence ; un écart à accepter
+                # (après acceptation, le clic suivant clôt la ligne sans rien toucher)
+                if not fichier.is_file():
+                    deja_vu = l["etat"] == "ecart" and bool(l["accepte"]) and "original_absent" in json.loads(l["ecarts"] or "[]")
+                    if not deja_vu:
+                        self._etat(l["ancien_id"], "ecart", ["original_absent"])
+                        self.base.executer("UPDATE photos SET accepte = 0 WHERE ancien_id = ?", (l["ancien_id"],))
+                        self.base.noter("Original absent au moment de supprimer", {"ancien": l["ancien_id"], "fichier": l["rel"]})
+                        gardes += 1
+                        continue
                 inst = json.loads(l["instantane"] or "{}")
                 if l["type"] == "VIDEO":
                     # 0.10.0 : un original vidéo part dans le sas (30 jours), pas à la poubelle — relecture : toute vidéo,

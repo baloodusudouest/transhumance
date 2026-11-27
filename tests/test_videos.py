@@ -340,3 +340,23 @@ def test_une_video_d_avant_la_0_10_part_aussi_au_sas(monde_videos):
     t.base.executer("UPDATE photos SET voie = NULL WHERE rel LIKE '%ancien.mp4'")         # comme une ligne de la 0.9.x
     assert t.supprimer(NEIGE)["supprimes"] == 1
     assert list(t.cfg.dossier_sas.rglob("ancien.mp4"))
+
+
+def test_original_absent_au_clic_ecart_puis_clos(monde_videos):
+    """0.10.1 (constaté le 27/11/2026) : un original vidéo retiré à la main avant le clic n'est plus compté « supprimé »
+    sans rien au sas : écart « original absent » ; accepté, le clic suivant clôt la ligne sans rien toucher."""
+    t, im, ancien, photos = monde_videos
+    t.regler_dossier(FETE, coche=True)
+    t.migrer()
+    encoder_tout(t)
+    t.migrer([FETE])
+    clip = ligne(t, "clip.mov")
+    (photos / clip["rel"]).unlink()                                   # retiré à la main
+    r = t.supprimer(FETE)
+    assert r["supprimes"] == 1                                         # l'autre vidéo, elle, va au sas
+    l = ligne(t, "clip.mov")
+    assert l["etat"] == "ecart" and json.loads(l["ecarts"]) == ["original_absent"] and not l["sas"]
+    assert t.bilan(FETE)["sas"]["nombre"] == 1 and not t.bilan(FETE)["termine"]
+    t.accepter(l["ancien_id"])
+    assert t.supprimer(FETE)["supprimes"] == 1
+    assert ligne(t, "clip.mov")["etat"] == "supprimee" and not ligne(t, "clip.mov")["sas"]
